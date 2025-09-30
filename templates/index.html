@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Basketball Parser</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- Подключаем Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            margin: 0; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .container { 
+            max-width: 1800px; 
+            margin: 0 auto; 
+            background: rgba(255, 255, 255, 0.95); 
+            padding: 20px; 
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-top: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .header { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e9ecef;
+        }
+        
+        .header h1 {
+            color: #2c3e50;
+            font-size: 2.2em;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+        }
+        
+        .stats { 
+            background: linear-gradient(135deg, #74b9ff, #0984e3);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 10px;
+            font-weight: 600;
+            box-shadow: 0 4px 15px rgba(116, 185, 255, 0.3);
+        }
+        
+        table { 
+            width: 100%; 
+            border-collapse: collapse;
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        small {
+            font-size: 12px;
+            opacity: 0.9;
+            font-weight: 600;
+        }        
+        th, td { 
+            padding: 14px 12px; 
+            text-align: left; 
+            border-bottom: 1px solid #e9ecef;
+            font-size: 14px;
+        }
+        
+        th { 
+            background: linear-gradient(135deg, #2c3e50, #34495e);
+            color: white;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 12px;
+            letter-spacing: 0.5px;
+        }
+        
+        tr:hover {
+            background-color: #f8f9fa;
+            transform: translateY(-1px);
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+        
+        .positive { 
+            color: #00b894; 
+            font-weight: bold;
+            background: rgba(0, 184, 148, 0.1);
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+        
+        .negative { 
+            color: #e17055; 
+            font-weight: bold;
+            background: rgba(225, 112, 85, 0.1);
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+        
+        .neutral { 
+            color: #636e72; 
+            background: rgba(99, 110, 114, 0.1);
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+        
+        .loading { 
+            text-align: center; 
+            padding: 40px; 
+            color: #6c757d;
+            font-size: 18px;
+        }
+        
+        .match-teams {
+            font-weight: 600;
+            color: #2d3436;
+        }
+        
+        .tournament {
+            color: #636e72;
+            font-size: 12px;
+        }
+        
+        /* Стилы для модального окна */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+        
+        .modal-content {
+            background-color: white;
+            margin: 2% auto;
+            padding: 20px;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 1400px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }       
+        .close:hover {
+            color: black;
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 600px;
+            width: 100%;
+            margin: 20px 0;
+        }
+        
+        .chart-title {
+            text-align: center;
+            margin: 10px 0;
+            font-size: 20px;
+            font-weight: bold;
+        }
+        
+        @media (max-width: 1200px) {
+            .container {
+                margin: 10px;
+                padding: 15px;
+            }
+            
+            table {
+                font-size: 12px;
+            }
+            
+            th, td {
+                padding: 10px 8px;
+            }
+            
+            .modal-content {
+                width: 95%;
+                margin: 2% auto;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏀 Basketball Parser Live</h1>
+            <div class="stats" id="stats">
+                Загрузка данных...
+            </div>
+        </div>
+
+        <div id="matches-table">
+            <div class="loading">🔄 Загрузка данных матчей...</div>
+        </div>
+    </div>
+
+    <!-- Модальное окно для графика -->
+    <div id="chartModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <div id="chartTitle" class="chart-title"></div>
+            <div class="chart-container">
+                <canvas id="matchChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentChart = null;
+        
+        // Обработчики для модального окна
+        const modal = document.getElementById('chartModal');
+        const closeBtn = document.querySelector('.close');
+        
+        closeBtn.onclick = function() {
+            modal.style.display = 'none';
+            if (currentChart) {
+                currentChart.destroy();
+            }
+        }
+        
+        window.onclick = function(event) {
+            if (event.target == modal) {
+                modal.style.display = 'none';
+                if (currentChart) {
+                    currentChart.destroy();
+                }
+            }
+        }
+
+        function showMatchChart(matchId, teams) {
+            // Загружаем данные графика
+            fetch(`/api/matches/${matchId}/chart`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        alert(data.error);
+                        return;
+                    }
+                    
+                    // Устанавливаем заголовок
+                    document.getElementById('chartTitle').textContent = teams;
+                    
+                    // Создаем график
+                    createChart(data, teams);
+                    
+                    // Показываем модальное окно
+                    modal.style.display = 'block';
+                })
+                .catch(error => {
+                    console.error('Ошибка загрузки графика:', error);
+                    alert('Ошибка загрузки графика');
+                });
+        }
+    function showMatchChart(matchId, teams) {
+        fetch(`/api/matches/${matchId}/chart`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert(data.error);
+                    return;
+                }
+                
+                // Простой заголовок
+                document.getElementById('chartTitle').textContent = teams;
+                
+                createChart(data, teams);
+                modal.style.display = 'block';
+            })
+            .catch(error => {
+                console.error('Ошибка загрузки графика:', error);
+                alert('Ошибка загрузки графика');
+            });
+    }
+    function createChart(chartData, teams) {
+        const ctx = document.getElementById('matchChart').getContext('2d');
+        
+        if (currentChart) {
+            currentChart.destroy();
+        }
+        
+        // Сохраняем данные scores для использования в тултипах
+        window.currentChartData = chartData;
+        
+        currentChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: chartData.timestamps,
+                datasets: [
+                    {
+                        label: 'Очки (тотал матча)',
+                        data: chartData.total_points,
+                        borderColor: 'rgb(75, 192, 192)',
+                        backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.1,
+                        fill: false
+                    },
+                    {
+                        label: 'Линия тотала',
+                        data: chartData.total_values,
+                        borderColor: 'rgb(255, 99, 132)',
+                        backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                        borderWidth: 2,
+                        borderDash: [5, 5],
+                        tension: 0.1,
+                        fill: false
+                    },
+                    {
+                        label: 'Темп игры',
+                        data: chartData.pace_data,
+                        borderColor: 'rgb(153, 102, 255)',
+                        backgroundColor: 'rgba(153, 102, 255, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.1,
+                        pointStyle: 'circle',
+                        pointRadius: 3,
+                        pointBackgroundColor: 'rgb(153, 102, 255)',
+                        fill: false
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false
+                },
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Время матча'
+                        },
+                        grid: {
+                            color: 'rgba(0, 0, 0, 0.1)'
+                        }
+                    },
+                    y: {
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
+                        title: {
+                            display: true,
+                            text: 'Очки / Темп'
+                        },
+                        grid: {
+                            color: 'rgba(0, 0, 0, 0.1)'
+                        }
+                    }
+                },
+                plugins: {
+                    title: {
+                        display: false
+                    },
+                    tooltip: {
+                        callbacks: {
+                            title: function(context) {
+                                // Берем актуальные данные из сохраненного объекта
+                                const index = context[0].dataIndex;
+                                const timestamp = window.currentChartData.timestamps[index];
+                                const score = window.currentChartData.scores ? window.currentChartData.scores[index] : 'N/A';
+                                return `Время: ${timestamp} | Счет: ${score}`;
+                            },
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                if (context.dataset.label === 'Темп игры') {
+                                    label += context.parsed.y + ' очков/игра';
+                                } else {
+                                    label += context.parsed.y;
+                                }
+                                return label;
+                            }
+                        }
+                    },
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        labels: {
+                            usePointStyle: true,
+                            padding: 20
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    function updateChart(newData) {
+        if (!currentChart || !newData.timestamps) return;
+        
+        // ОБНОВЛЯЕМ ВСЕ данные, включая scores
+        window.currentChartData = newData; // ⬅️ ВАЖНО: обновляем глобальные данные
+        
+        currentChart.data.labels = newData.timestamps;
+        currentChart.data.datasets[0].data = newData.total_points;
+        currentChart.data.datasets[1].data = newData.total_values;
+        currentChart.data.datasets[2].data = newData.pace_data;
+        
+        // Принудительно обновляем тултипы
+        currentChart.update('none');
+    }
+
+        function updateTable(matches) {
+            if (!matches || matches.length === 0) {
+                document.getElementById('matches-table').innerHTML = 
+                    '<div class="loading">📭 Нет активных матчей в данный момент</div>';
+                document.getElementById('stats').innerHTML = 
+                    'Матчей: 0 | Обновлено: ' + new Date().toLocaleTimeString();
+                return;
+            }
+
+            document.getElementById('stats').innerHTML = 
+                `📊 Матчей: ${matches.length} | 🔄 ${new Date().toLocaleTimeString()}`;
+
+            let html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Команды / Турнир</th>
+                            <th>Время</th>
+                            <th>Счет</th>
+                            <th>Очки</th>
+                            <th>Нач. тотал</th>
+                            <th>Тек. тотал</th>
+                            <th>Темп</th>
+                            <th>Отклонение</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            matches.forEach(match => {
+                const deviationClass = getDeviationClass(match.total_deviation);
+                const deviationText = match.total_deviation ? 
+                    `${match.total_deviation > 0 ? '+' : ''}${match.total_deviation}%` : '-';
+
+                html += `
+                    <tr onclick="showMatchChart(${match.id}, '${match.teams.replace(/'/g, "\\'")}')">
+                        <td>
+                            <div class="match-teams">${match.teams}</div>
+                            <div class="tournament">${match.tournament}</div>
+                        </td>
+                        <td><strong>${match.current_time}</strong></td>
+                        <td><strong>${match.score}</strong></td>
+                        <td>${match.total_points}</td>
+                        <td>
+                            <strong>${match.initial_total || '-'}</strong>
+                            ${match.initial_total && match.total_value ? 
+                                `<div class="${getTotalChangeClass(match.total_value, match.initial_total)}">
+                                    ${getTotalChangeText(match.total_value, match.initial_total)}
+                                </div>` : 
+                                ''
+                            }
+                        </td>
+                        <td>
+                            <strong>${match.total_value || '-'}</strong>
+                            ${match.total_change_percent ? 
+                                `<div class="${getChangeClass(match.total_change_percent)}">
+                                    ${getChangeText(match.total_change_percent)}
+                                </div>` : 
+                                ''
+                            }
+                        </td>
+                        <td>
+                            <strong>${match.current_pace || '-'}</strong>
+                            ${match.pace_change_percent ? 
+                                `<div class="${getChangeClass(match.pace_change_percent)}">
+                                    ${getChangeText(match.pace_change_percent)}
+                                </div>` : 
+                                ''
+                            }
+                        </td>
+                        <td>
+                            <span class="${getDeviationClass(match.total_deviation)}">
+                                ${match.total_deviation ? `${match.total_deviation > 0 ? '+' : ''}${match.total_deviation}%` : '-'}
+                            </span>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            html += '</tbody></table>';
+            document.getElementById('matches-table').innerHTML = html;
+        }
+        function getTotalChangeClass(currentTotal, initialTotal) {
+            if (!currentTotal || !initialTotal) return 'neutral';
+            const changePercent = ((currentTotal - initialTotal) / initialTotal) * 100;
+            if (changePercent > 2) return 'positive';
+            if (changePercent < -2) return 'negative';
+            return 'neutral';
+        }
+
+        function getChangeClass(change) {
+            if (change > 1) return 'positive';
+            if (change < -1) return 'negative';
+            return 'neutral';
+        }
+
+        function getDeviationClass(deviation) {
+            if (!deviation) return 'neutral';
+            if (deviation > 5) return 'positive';
+            if (deviation < -5) return 'negative';
+            return 'neutral';
+        }
+
+        function getTotalChangeText(currentTotal, initialTotal) {
+            if (!currentTotal || !initialTotal) return '';
+            const change = currentTotal - initialTotal;
+            const percent = ((change / initialTotal) * 100).toFixed(1);
+            return `(${change > 0 ? '+' : ''}${change.toFixed(1)}) ${change > 0 ? '+' : ''}${percent}%`;
+        }
+
+        function getChangeText(change) {
+            if (!change) return '';
+            return `(${change > 0 ? '+' : ''}${change}%)`;
+        }
+        // WebSocket для реального времени
+        let currentMatchId = null;
+
+    function connectWebSocket() {
+        const socket = new WebSocket('ws://' + window.location.host + '/ws');
+        
+        socket.onopen = function() {
+            console.log('WebSocket connected');
+            document.getElementById('stats').innerHTML = 'Подключено | Ожидание данных...';
+        };
+        
+        socket.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            
+            if (data.type === "table_update") {
+                // Обновляем таблицу
+                updateTable(data.data.matches);
+                
+                // Если открыт график, обновляем и его
+                if (currentMatchId && currentChart) {
+                    updateChartForMatch(currentMatchId);
+                }
+            }
+        };
+
+        socket.onclose = function() {
+            console.log('WebSocket disconnected');
+            document.getElementById('stats').innerHTML = 'Переподключение...';
+            setTimeout(connectWebSocket, 3000);
+        };
+
+        socket.onerror = function(error) {
+            console.error('WebSocket error:', error);
+        };
+    }
+        function showMatchChart(matchId, teams) {
+            currentMatchId = matchId;
+            
+            // Загружаем начальные данные
+            fetch(`/api/matches/${matchId}/chart`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        alert(data.error);
+                        return;
+                    }
+                    
+                    document.getElementById('chartTitle').textContent = teams;
+                    createChart(data, teams);
+                    modal.style.display = 'block';
+                })
+                .catch(error => {
+                    console.error('Ошибка загрузки графика:', error);
+                    alert('Ошибка загрузки графика');
+                });
+        }
+
+    function updateChartForMatch(matchId) {
+        // Загружаем обновленные данные графика
+        fetch(`/api/matches/${matchId}/chart`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) return;
+                updateChart(data);
+            })
+            .catch(error => {
+                console.error('Ошибка обновления графика:', error);
+            });
+    }
+
+
+        closeBtn.onclick = function() {
+            modal.style.display = 'none';
+            if (currentChart) {
+                currentChart.destroy();
+                currentChart = null;
+            }
+            currentMatchId = null;
+        }
+        
+        window.onclick = function(event) {
+            if (event.target == modal) {
+                modal.style.display = 'none';
+                if (currentChart) {
+                    currentChart.destroy();
+                    currentChart = null;
+                }
+                currentMatchId = null;
+            }
+        }
+        // Первоначальная загрузка
+        fetch('/api/matches')
+            .then(response => response.json())
+            .then(data => updateTable(data.matches))
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('matches-table').innerHTML = 
+                    '<div class="loading">❌ Ошибка загрузки данных</div>';
+            });
+
+        // Запускаем WebSocket
+        connectWebSocket();
+    </script>
+</body>
+</html>
