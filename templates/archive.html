@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Basketball Parser - Архив матчей</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            margin: 0; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .container { 
+            max-width: 1800px; 
+            margin: 0 auto; 
+            background: rgba(255, 255, 255, 0.95); 
+            padding: 20px; 
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-top: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .header { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e9ecef;
+        }
+        
+        .header h1 {
+            color: #2c3e50;
+            font-size: 2.2em;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+        }
+        
+        .nav-links {
+            display: flex;
+            gap: 20px;
+        }
+        
+        .nav-links a {
+            text-decoration: none;
+            color: #2c3e50;
+            font-weight: 600;
+            padding: 8px 16px;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+        
+        .nav-links a:hover {
+            background: #f8f9fa;
+        }
+        
+        .nav-links a.active {
+            background: #667eea;
+            color: white;
+        }
+        
+        .filters {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+        
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .filter-group label {
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: #495057;
+        }
+        
+        .filter-group input, .filter-group select {
+            padding: 8px 12px;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        
+        .stats { 
+            background: linear-gradient(135deg, #74b9ff, #0984e3);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 10px;
+            font-weight: 600;
+            box-shadow: 0 4px 15px rgba(116, 185, 255, 0.3);
+            margin-bottom: 20px;
+        }
+        
+        table { 
+            width: 100%; 
+            border-collapse: collapse;
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        th, td { 
+            padding: 14px 12px; 
+            text-align: left; 
+            border-bottom: 1px solid #e9ecef;
+            font-size: 14px;
+        }
+        
+        th { 
+            background: linear-gradient(135deg, #2c3e50, #34495e);
+            color: white;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 12px;
+            letter-spacing: 0.5px;
+        }
+        
+        tr:hover {
+            background-color: #f8f9fa;
+            transform: translateY(-1px);
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+        
+        .positive { 
+            color: #00b894; 
+            font-weight: bold;
+            background: rgba(0, 184, 148, 0.1);
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+        
+        .negative { 
+            color: #e17055; 
+            font-weight: bold;
+            background: rgba(225, 112, 85, 0.1);
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+        
+        .neutral { 
+            color: #636e72; 
+            background: rgba(99, 110, 114, 0.1);
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+        
+        .over { 
+            color: #00b894;
+            font-weight: bold;
+        }
+        
+        .under { 
+            color: #e17055;
+            font-weight: bold;
+        }
+        
+        .loading { 
+            text-align: center; 
+            padding: 40px; 
+            color: #6c757d;
+            font-size: 18px;
+        }
+        
+        .match-teams {
+            font-weight: 600;
+            color: #2d3436;
+        }
+        
+        .tournament {
+            color: #636e72;
+            font-size: 12px;
+        }
+        
+        .btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        
+        .btn:hover {
+            background: #5a6fd8;
+            transform: translateY(-1px);
+        }
+        
+        /* Стилы для модального окна */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+        
+        .modal-content {
+            background-color: white;
+            margin: 2% auto;
+            padding: 20px;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 1400px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        
+        .close:hover {
+            color: black;
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 600px;
+            width: 100%;
+            margin: 20px 0;
+        }
+        
+        .chart-title {
+            text-align: center;
+            margin: 10px 0;
+            font-size: 20px;
+            font-weight: bold;
+        }
+        
+        .archive-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        
+        .stat-label {
+            font-size: 14px;
+            color: #6c757d;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏀 Basketball Parser - Архив</h1>
+            <div class="nav-links">
+                <a href="/">📊 Live матчи</a>
+                <a href="/archive" class="active">📁 Архив</a>
+            </div>
+        </div>
+
+        <!-- Фильтры -->
+        <div class="filters">
+            <div class="filter-group">
+                <label for="dateFrom">Дата с:</label>
+                <input type="date" id="dateFrom">
+            </div>
+            <div class="filter-group">
+                <label for="dateTo">Дата по:</label>
+                <input type="date" id="dateTo">
+            </div>
+            <div class="filter-group">
+                <label for="tournament">Турнир:</label>
+                <input type="text" id="tournament" placeholder="Все турниры">
+            </div>
+            <div class="filter-group">
+                <label for="team">Команда:</label>
+                <input type="text" id="team" placeholder="Любая команда">
+            </div>
+            <div class="filter-group">
+                <label>&nbsp;</label>
+                <button class="btn" onclick="loadArchiveMatches()">🔍 Применить фильтры</button>
+            </div>
+        </div>
+
+        <!-- Статистика архива -->
+        <div class="archive-stats" id="archiveStats">
+            <div class="stat-card">
+                <div class="stat-value" id="totalMatches">-</div>
+                <div class="stat-label">Всего матчей</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="overPercentage">-</div>
+                <div class="stat-label">OVER %</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="underPercentage">-</div>
+                <div class="stat-label">UNDER %</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="avgDeviation">-</div>
+                <div class="stat-label">Ср. отклонение</div>
+            </div>
+        </div>
+
+        <div class="stats" id="stats">
+            Загрузка архива...
+        </div>
+
+        <div id="matches-table">
+            <div class="loading">🔄 Загрузка архивных матчей...</div>
+        </div>
+    </div>
+
+    <!-- Модальное окно для графика -->
+    <div id="chartModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <div id="chartTitle" class="chart-title"></div>
+            <div class="chart-container">
+                <canvas id="matchChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentChart = null;
+        let currentOpenMatchId = null;
+
+        // Обработчики для модального окна
+        const modal = document.getElementById('chartModal');
+        const closeBtn = document.querySelector('.close');
+
+        closeBtn.onclick = function() {
+            modal.style.display = 'none';
+            if (currentChart) {
+                currentChart.destroy();
+                currentChart = null;
+            }
+            currentOpenMatchId = null;
+        }
+
+        window.onclick = function(event) {
+            if (event.target == modal) {
+                modal.style.display = 'none';
+                if (currentChart) {
+                    currentChart.destroy();
+                    currentChart = null;
+                }
+                currentOpenMatchId = null;
+            }
+        }
+
+        // Функция загрузки архивных матчей
+        function loadArchiveMatches() {
+            const dateFrom = document.getElementById('dateFrom').value;
+            const dateTo = document.getElementById('dateTo').value;
+            const tournament = document.getElementById('tournament').value;
+            const team = document.getElementById('team').value;
+
+            document.getElementById('matches-table').innerHTML = '<div class="loading">🔄 Загрузка архивных матчей...</div>';
+            document.getElementById('stats').innerHTML = 'Загрузка...';
+
+            let url = '/api/matches/archive?';
+            const params = [];
+            
+            if (dateFrom) params.push(`date_from=${dateFrom}`);
+            if (dateTo) params.push(`date_to=${dateTo}`);
+            if (tournament) params.push(`tournament=${encodeURIComponent(tournament)}`);
+            if (team) params.push(`team=${encodeURIComponent(team)}`);
+            
+            url += params.join('&');
+
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    updateArchiveTable(data.matches);
+                    updateArchiveStats(data.stats);
+                })
+                .catch(error => {
+                    console.error('Ошибка загрузки архива:', error);
+                    document.getElementById('matches-table').innerHTML = 
+                        '<div class="loading">❌ Ошибка загрузки архива</div>';
+                });
+        }
+
+        // Функция обновления таблицы архивных матчей
+        function updateArchiveTable(matches) {
+            if (!matches || matches.length === 0) {
+                document.getElementById('matches-table').innerHTML = 
+                    '<div class="loading">📭 Нет матчей по выбранным фильтрам</div>';
+                document.getElementById('stats').innerHTML = 
+                    'Матчей: 0';
+                return;
+            }
+
+            document.getElementById('stats').innerHTML = 
+                `📊 Найдено матчей: ${matches.length}`;
+
+            let html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Дата</th>
+                            <th>Команды / Турнир</th>
+                            <th>Финальный счет</th>
+                            <th>Очки</th>
+                            <th>Нач. тотал</th>
+                            <th>Фин. тотал</th>
+                            <th>Темп</th>
+                            <th>Результат</th>
+                            <th>Отклонение</th>
+                            <th>Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            matches.forEach(match => {
+                const resultClass = match.total_result === 'OVER' ? 'over' : 
+                                  match.total_result === 'UNDER' ? 'under' : 'neutral';
+                const deviationClass = getDeviationClass(match.final_deviation);
+                const deviationText = match.final_deviation ? 
+                    `${match.final_deviation > 0 ? '+' : ''}${match.final_deviation}%` : '-';
+
+                html += `
+                    <tr>
+                        <td>${match.finished_date || '-'}</td>
+                        <td>
+                            <div class="match-teams">${match.teams}</div>
+                            <div class="tournament">${match.tournament}</div>
+                        </td>
+                        <td><strong>${match.final_score || match.score || '-'}</strong></td>
+                        <td><strong>${match.final_points || match.total_points || '-'}</strong></td>
+                        <td>${match.initial_total || '-'}</td>
+                        <td>${match.final_total || match.total_value || '-'}</td>
+                        <td>${match.final_pace || match.current_pace || '-'}</td>
+                        <td>
+                            <span class="${resultClass}">
+                                ${match.total_result || '-'}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="${deviationClass}">
+                                ${deviationText}
+                            </span>
+                        </td>
+                        <td>
+                            <button class="btn" onclick="showArchiveChart(${match.id}, '${escapeHtml(match.teams)}')">
+                                📈 График
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            html += '</tbody></table>';
+            document.getElementById('matches-table').innerHTML = html;
+        }
+
+        // Функция обновления статистики архива
+        function updateArchiveStats(stats) {
+            if (!stats) return;
+            
+            document.getElementById('totalMatches').textContent = stats.total_matches || '-';
+            document.getElementById('overPercentage').textContent = stats.over_percentage ? stats.over_percentage + '%' : '-';
+            document.getElementById('underPercentage').textContent = stats.under_percentage ? stats.under_percentage + '%' : '-';
+            document.getElementById('avgDeviation').textContent = stats.avg_deviation ? stats.avg_deviation + '%' : '-';
+        }
+
+        // Функция показа графика для архивного матча
+        function showArchiveChart(matchId, teams) {
+            console.log('📊 Opening archive chart for match:', matchId);
+            
+            currentOpenMatchId = matchId;
+            
+            fetch(`/api/matches/${matchId}/chart`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        alert(data.error);
+                        return;
+                    }
+                    
+                    // Добавляем информацию о финальном результате
+                    const finalInfo = data.final_result ? 
+                        ` | Финальный результат: ${data.final_result}` : '';
+                    
+                    document.getElementById('chartTitle').innerHTML = `
+                        <div style="text-align: center; padding: 10px 0;">
+                            <div style="font-size: 20px; font-weight: bold; color: #2c3e50; margin-bottom: 6px;">
+                                ${teams} ${finalInfo}
+                            </div>
+                            <div style="font-size: 14px; color: #7f8c8d; background: #f8f9fa; padding: 4px 12px; border-radius: 12px; display: inline-block;">
+                                📊 Архивный матч
+                            </div>
+                        </div>
+                    `;
+                    
+                    createArchiveChart(data, teams);
+                    modal.style.display = 'block';
+                })
+                .catch(error => {
+                    console.error('Ошибка загрузки графика:', error);
+                    alert('Ошибка загрузки графика');
+                });
+        }
+
+        // Функция создания графика для архивного матча с темпом
+        function createArchiveChart(chartData, teams) {
+            const ctx = document.getElementById('matchChart').getContext('2d');
+            
+            if (currentChart) {
+                currentChart.destroy();
+            }
+            
+            // Получаем текущие значения для легенды
+            const currentValues = getCurrentValues(chartData);
+            
+            currentChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: chartData.timestamps,
+                    datasets: [
+                        {
+                            label: `Очки (тотал матча): ${currentValues.totalPoints}`,
+                            data: chartData.total_points,
+                            borderColor: 'rgb(75, 192, 192)',
+                            backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                            borderWidth: 2,
+                            tension: 0.1,
+                            fill: false,
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: `Линия тотала: ${currentValues.totalValue}`,
+                            data: chartData.total_values,
+                            borderColor: 'rgb(255, 99, 132)',
+                            backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                            borderWidth: 2,
+                            borderDash: [5, 5],
+                            tension: 0.1,
+                            fill: false,
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: `Темп игры: ${currentValues.pace}`,
+                            data: chartData.pace_data,
+                            borderColor: 'rgb(153, 102, 255)',
+                            backgroundColor: 'rgba(153, 102, 255, 0.1)',
+                            borderWidth: 2,
+                            tension: 0.1,
+                            pointStyle: 'circle',
+                            pointRadius: 3,
+                            pointBackgroundColor: 'rgb(153, 102, 255)',
+                            fill: false,
+                            yAxisID: 'y'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Время матча'
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.1)'
+                            }
+                        },
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            title: {
+                                display: true,
+                                text: 'Очки / Темп'
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.1)'
+                            }
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                title: function(context) {
+                                    const index = context[0].dataIndex;
+                                    const timestamp = chartData.timestamps[index];
+                                    const score = chartData.scores ? chartData.scores[index] : 'N/A';
+                                    return `Время: ${timestamp} | Счет: ${score}`;
+                                },
+                                label: function(context) {
+                                    let label = context.dataset.label.split(':')[0] || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    if (label.includes('Темп игры')) {
+                                        label += context.parsed.y + ' очков/игра';
+                                    } else {
+                                        label += context.parsed.y;
+                                    }
+                                    return label;
+                                }
+                            }
+                        },
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            labels: {
+                                usePointStyle: true,
+                                padding: 20,
+                                font: {
+                                    size: 12
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Функция получения текущих значений для легенды
+        function getCurrentValues(chartData) {
+            if (!chartData || !chartData.total_points || chartData.total_points.length === 0) {
+                return { totalPoints: '-', totalValue: '-', pace: '-' };
+            }
+            
+            const lastIndex = chartData.total_points.length - 1;
+            
+            return {
+                totalPoints: chartData.total_points[lastIndex] || '-',
+                totalValue: chartData.total_values[lastIndex] || '-',
+                pace: chartData.pace_data[lastIndex] || '-'
+            };
+        }
+
+        // Вспомогательные функции
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function getDeviationClass(deviation) {
+            if (!deviation) return 'neutral';
+            if (deviation > 5) return 'positive';
+            if (deviation < -5) return 'negative';
+            return 'neutral';
+        }
+
+        // Загрузка архива при открытии страницы
+        document.addEventListener('DOMContentLoaded', function() {
+            loadArchiveMatches();
+            
+            // Устанавливаем даты по умолчанию (последние 7 дней)
+            const today = new Date();
+            const weekAgo = new Date();
+            weekAgo.setDate(today.getDate() - 7);
+            
+            document.getElementById('dateFrom').value = weekAgo.toISOString().split('T')[0];
+            document.getElementById('dateTo').value = today.toISOString().split('T')[0];
+        });
+    </script>
+</body>
+</html>

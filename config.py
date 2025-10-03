@@ -77,3 +77,10 @@ STRATEGY_CONFIG = {
     'MIN_MATCH_PROGRESS': 15,      # Минимальный прогресс матча для анализа (%)
     'MAX_MATCH_PROGRESS': 85,      # Максимальный прогресс матча для анализа (%)
 }
+
+PRODUCTION_CONFIG = {
+    'DEBUG': False,
+    'REFRESH_INTERVAL': 10,
+    'HEADLESS': True,
+    'DATABASE_PATH': '/app/data/basketball.db'
+}

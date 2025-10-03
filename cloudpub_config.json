@@ -1,0 +1,7 @@
+{
+    "tunnel_name": "basketball-parser",
+    "local_url": "http://localhost:8000",
+    "protocol": "http",
+    "port": 8000,
+    "subdomain": "https://chemically-oriented-anteater.cloudpub.ru/"
+}

@@ -134,7 +134,7 @@ async def main_page(request: Request):
 
 @app.get("/api/matches/{match_id}/chart")
 async def get_match_chart(match_id: int):
-    """API для получения данных графика матча"""
+    """API для получения данных графика матча (работает и для архивных)"""
     try:
         loop = asyncio.get_event_loop()
 
@@ -161,11 +161,12 @@ async def get_match_chart(match_id: int):
         match_info = await loop.run_in_executor(
             None,
             lambda: db.conn.execute(
-                'SELECT total_match_time FROM matches WHERE id = ?',
+                'SELECT total_match_time, status FROM matches WHERE id = ?',
                 (match_id,)
             ).fetchone()
         )
         total_match_time = match_info[0] if match_info else 40
+        match_status = match_info[1] if match_info else 'finished'
 
         # Форматируем данные для графика
         timestamps = []
@@ -185,18 +186,27 @@ async def get_match_chart(match_id: int):
             total_points.append(points)
             total_values.append(total_value)
 
-            # Вычисляем темп для этой записи
-            pace = calculate_pace_for_record(
-                timestamp, points, total_match_time)
+            # ВЫЧИСЛЯЕМ ТЕМП ДЛЯ АРХИВНЫХ МАТЧЕЙ
+            pace = calculate_pace_for_record(timestamp, points, total_match_time, total_value)
             pace_data.append(pace)
+
+        # Для архивных матчей добавляем финальную информацию
+        final_result = None
+        if match_status == 'finished' and total_points:
+            final_points = total_points[-1] if total_points else 0
+            final_total = total_values[-1] if total_values else 0
+            if final_total > 0:
+                final_result = 'OVER' if final_points > final_total else 'UNDER'
 
         return {
             "timestamps": timestamps,
-            "scores": scores,  # ⬅️ ВАЖНО: возвращаем scores
+            "scores": scores,
             "total_points": total_points,
             "total_values": total_values,
             "pace_data": pace_data,
-            "total_match_time": total_match_time
+            "total_match_time": total_match_time,
+            "final_result": final_result,
+            "match_status": match_status
         }
 
     except Exception as e:
@@ -204,8 +214,129 @@ async def get_match_chart(match_id: int):
         return {"error": "Ошибка загрузки данных"}
 
 
-def calculate_pace_for_record(timestamp, total_points, total_match_time):
-    """Расчет темпа для конкретной записи в истории"""
+@app.get("/api/matches/archive")
+async def get_archive_matches(
+    date_from: str = None,
+    date_to: str = None,
+    tournament: str = None,
+    team: str = None,
+    limit: int = 100
+):
+    """Получение завершенных матчей"""
+    try:
+        loop = asyncio.get_event_loop()
+
+        # Базовый SQL запрос
+        query = '''
+            SELECT 
+                m.id, m.teams, m.tournament, m.created_at,
+                ms_final.score as final_score,
+                ms_final.total_points as final_points,
+                ms_final.total_value as final_total,
+                ms_first.total_value as initial_total,
+                m.updated_at as finished_date
+            FROM matches m
+            JOIN match_stats ms_final ON m.id = ms_final.match_id
+            JOIN match_stats ms_first ON m.id = ms_first.match_id
+            WHERE m.status = 'finished'
+            AND ms_final.recorded_at = (
+                SELECT MAX(recorded_at) FROM match_stats WHERE match_id = m.id
+            )
+            AND ms_first.recorded_at = (
+                SELECT MIN(recorded_at) FROM match_stats WHERE match_id = m.id
+            )
+        '''
+
+        params = []
+
+        # Добавляем фильтры
+        if date_from:
+            query += " AND DATE(m.updated_at) >= ?"
+            params.append(date_from)
+        if date_to:
+            query += " AND DATE(m.updated_at) <= ?"
+            params.append(date_to)
+        if tournament:
+            query += " AND m.tournament LIKE ?"
+            params.append(f'%{tournament}%')
+        if team:
+            query += " AND m.teams LIKE ?"
+            params.append(f'%{team}%')
+
+        query += " ORDER BY m.updated_at DESC LIMIT ?"
+        params.append(limit)
+
+        # Выполняем запрос
+        matches = await loop.run_in_executor(
+            None,
+            lambda: db.conn.execute(query, params).fetchall()
+        )
+
+        # Форматируем результат
+        formatted_matches = []
+        for match in matches:
+            match_data = {
+                'id': match[0],
+                'teams': match[1],
+                'tournament': match[2],
+                'created_at': match[3],
+                'final_score': match[4],
+                'final_points': match[5],
+                'final_total': match[6],
+                'initial_total': match[7],
+                'finished_date': match[8]
+            }
+
+            # Рассчитываем дополнительные показатели
+            if match_data['final_points'] and match_data['final_total']:
+                # Для архивных матчей темп = финальные очки
+                final_pace = match_data['final_points']
+                deviation = (
+                    (final_pace - match_data['final_total']) / match_data['final_total']) * 100
+                match_data['final_pace'] = round(final_pace, 1)
+                match_data['final_deviation'] = round(deviation, 1)
+                match_data['total_result'] = 'OVER' if final_pace > match_data['final_total'] else 'UNDER'
+
+            formatted_matches.append(match_data)
+
+        # Базовая статистика
+        stats = {
+            'total_matches': len(formatted_matches),
+            'over_matches': len([m for m in formatted_matches if m.get('total_result') == 'OVER']),
+            'under_matches': len([m for m in formatted_matches if m.get('total_result') == 'UNDER']),
+        }
+
+        if stats['total_matches'] > 0:
+            stats['over_percentage'] = round(
+                (stats['over_matches'] / stats['total_matches']) * 100, 1)
+            stats['under_percentage'] = round(
+                (stats['under_matches'] / stats['total_matches']) * 100, 1)
+
+            # Среднее отклонение
+            deviations = [m.get('final_deviation', 0)
+                          for m in formatted_matches if m.get('final_deviation')]
+            if deviations:
+                stats['avg_deviation'] = round(
+                    sum(deviations) / len(deviations), 1)
+
+        return {
+            "matches": formatted_matches,
+            "stats": stats
+        }
+
+    except Exception as e:
+        logging.error(f"Ошибка получения архива: {e}")
+        return {"matches": [], "stats": {}}
+
+
+@app.get("/archive", response_class=HTMLResponse)
+async def archive_page(request: Request):
+    """Страница архива матчей"""
+    return templates.TemplateResponse("archive.html", {"request": request})
+
+
+def calculate_pace_for_record(timestamp, total_points, total_match_time, total_value=None):
+    """Расчет темпа для конкретной записи в истории с валидацией"""
     try:
         if timestamp == '-' or ':' not in timestamp or total_points == 0:
             return None
@@ -222,6 +353,26 @@ def calculate_pace_for_record(timestamp, total_points, total_match_time):
         # Расчет темпа
         current_pace = (total_points * total_match_time) / \
             total_minutes_elapsed
+
+        # ВАЛИДАЦИЯ: темп не может превышать тотал более чем на 50%
+        if total_value and total_value > 0:
+            max_allowed_pace = total_value * 1.5  # +50% от тотала
+            if current_pace > max_allowed_pace:
+                logging.debug(
+                    f"Темп скорректирован: {current_pace:.1f} -> {max_allowed_pace:.1f} (превышение +50%)")
+                return round(max_allowed_pace, 1)
+
+        # Дополнительная валидация: разумные пределы для баскетбола
+        if current_pace > 300:  # Максимальный разумный темп
+            logging.debug(
+                f"Темп скорректирован: {current_pace:.1f} -> 300.0 (превышение максимального предела)")
+            return 300.0
+
+        if current_pace < 50:   # Минимальный разумный темп
+            logging.debug(
+                f"Темп скорректирован: {current_pace:.1f} -> 50.0 (ниже минимального предела)")
+            return 50.0
+
         return round(current_pace, 1)
 
     except Exception as e:
@@ -230,7 +381,7 @@ def calculate_pace_for_record(timestamp, total_points, total_match_time):
 
 
 def calculate_pace(match_data):
-    """Расчет темпа и производных показателей"""
+    """Расчет темпа и производных показателей с валидацией"""
     try:
         if (match_data['score'] == '-' or
             match_data['current_time'] == '-' or
@@ -247,8 +398,25 @@ def calculate_pace(match_data):
             return {}
 
         total_match_time = safe_int(match_data.get('total_match_time', 40))
+
+        # Расчет темпа
         current_pace = (match_data['total_points']
                         * total_match_time) / total_minutes_elapsed
+
+        # ВАЛИДАЦИЯ: темп не может превышать тотал более чем на 50%
+        if match_data.get('total_value') and match_data['total_value'] > 0:
+            # +50% от тотала
+            max_allowed_pace = match_data['total_value'] * 1.5
+            if current_pace > max_allowed_pace:
+                logging.info(
+                    f"Валидация темпа: {match_data['teams']} - темп скорректирован {current_pace:.1f} -> {max_allowed_pace:.1f}")
+                current_pace = max_allowed_pace
+
+        # Дополнительные разумные пределы
+        if current_pace > 300:
+            current_pace = 300.0
+        elif current_pace < 50:
+            current_pace = 50.0
 
         total_deviation = None
         if match_data['total_value']:
@@ -258,7 +426,8 @@ def calculate_pace(match_data):
         return {
             'current_pace': round(current_pace, 1),
             'total_deviation': round(total_deviation, 1) if total_deviation else None,
-            'minutes_elapsed': round(total_minutes_elapsed, 1)
+            'minutes_elapsed': round(total_minutes_elapsed, 1),
+            'pace_validated': True  # Флаг что темп прошел валидацию
         }
 
     except Exception as e:
