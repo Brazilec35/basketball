@@ -15,7 +15,7 @@ PARSER_CONFIG = {
 BROWSER_CONFIG = {
     'HEADLESS': True,                 # без GUI для скорости
     'USER_AGENT': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-    'WINDOW_SIZE': '1920,1080',
+    'WINDOW_SIZE': '3840,2160',
     'DISABLE_LOGS': True,             # отключить логи браузера
     'SCALE_FACTOR': 0.5
 }
@@ -46,6 +46,14 @@ MATCH_FILTERS = {
     'EXCLUDE_WOMEN': False,           # исключать женские матчи (кроме (ж))
     # минимальное время матча для анализа (минуты)
     'MIN_TIME_ELAPSED': 2,
+    'BANNED_TOURNAMENTS': [
+        'РОССИЯ. IPBL. PRO DIVISION',
+        'РОССИЯ. IPBL. SPACE DIVISION',
+        'РОССИЯ. IPBL. ЖЕНЩИНЫ. SPACE DIVISION',
+        'РОССИЯ. IPBL. PRIME DIVISION',
+        'Китай. CDBL',
+        'КИТАЙ. CDBL'
+    ]
 }
 
 MATCH_TIME_CONFIG = {

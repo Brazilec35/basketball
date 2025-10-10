@@ -9,14 +9,11 @@ import json
 import logging
 import asyncio
 from datetime import datetime
-# Импортируем функции из database
 from database import Database, safe_int, safe_float
 
 app = FastAPI(title="Basketball Parser")
 templates = Jinja2Templates(directory="templates")
 db = Database()
-
-# Убираем дублирующиеся функции safe_int и safe_float отсюда
 
 
 class DataAnalyzer:
@@ -86,7 +83,6 @@ data_analyzer = DataAnalyzer(db)
 async def get_matches():
     """API для получения активных матчей"""
     try:
-        # Используем asyncio для выполнения синхронных операций с БД
         loop = asyncio.get_event_loop()
         matches = await loop.run_in_executor(None, db.get_active_matches)
 

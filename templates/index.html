@@ -4,7 +4,6 @@
     <title>Basketball Parser</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <!-- Подключаем Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         * {
@@ -13,6 +12,7 @@
             box-sizing: border-box;
         }
         
+        /* Основные стили страницы */
         body { 
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
             margin: 0; 
@@ -97,7 +97,7 @@
             padding: 14px 12px; 
             text-align: left; 
             border-bottom: 1px solid #e9ecef;
-            font-size: 14px;
+            font-size: 16px;
         }
         
         th { 
@@ -105,7 +105,7 @@
             color: white;
             font-weight: 600;
             text-transform: uppercase;
-            font-size: 12px;
+            font-size: 14px;
             letter-spacing: 0.5px;
         }
         
@@ -116,6 +116,7 @@
             cursor: pointer;
         }
         
+        /* Цветовые классы для отклонений */
         .positive { 
             color: #00b894; 
             font-weight: bold;
@@ -149,6 +150,7 @@
         .match-teams {
             font-weight: 600;
             color: #2d3436;
+            font-size: 14px;
         }
         
         .tournament {
@@ -156,7 +158,7 @@
             font-size: 12px;
         }
         
-        /* Стилы для модального окна */
+        /* Стили для модального окна с графиком */
         .modal {
             display: none;
             position: fixed;
@@ -174,7 +176,7 @@
             padding: 20px;
             border-radius: 10px;
             width: 90%;
-            max-width: 1400px;
+            max-width: 1400px;  /* Максимальная ширина модалки */
             max-height: 90vh;
             overflow-y: auto;
         }
@@ -190,9 +192,10 @@
             color: black;
         }
         
+        /* Контейнер для графика - ОСНОВНОЙ РАЗМЕР ГРАФИКА */
         .chart-container {
             position: relative;
-            height: 600px;
+            height: 525px;  /* Высота графика */
             width: 100%;
             margin: 20px 0;
         }
@@ -203,65 +206,91 @@
             font-size: 20px;
             font-weight: bold;
         }
-        
-        /* Стили для фаз */
-        .phase-analysis, .phase-over, .phase-under, .phase-waiting {
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-weight: 600;
-            font-size: 12px;
-            display: inline-block;
-            min-width: 80px;
+        /* Стили для всплывающего табло изменений */
+        .change-indicator {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.8);
+            background: rgba(255, 255, 255, 0.95);
+            border: 2px solid #667eea;
+            border-radius: 15px;
+            padding: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            z-index: 1000;
+            opacity: 0;
+            transition: all 0.3s ease;
+            pointer-events: none;
+            min-width: 200px;
+        }
+
+        .change-indicator.show {
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1);
+        }
+
+        .change-content {
             text-align: center;
         }
-        
-        .phase-analysis { background: #e3f2fd; color: #1565c0; }
-        .phase-over { background: #e8f5e8; color: #2e7d32; }
-        .phase-under { background: #ffebee; color: #c62828; }
-        .phase-waiting { background: #f5f5f5; color: #616161; }
 
-        /* Стили для сигналов */
-        .signal-strong, .signal-medium, .signal-weak, .signal-none {
-            padding: 4px 8px;
-            border-radius: 4px;
+        .change-header {
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 10px;
+            font-size: 16px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 5px;
+        }
+
+        .change-stats {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .change-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 5px 0;
+        }
+
+        .change-label {
             font-weight: 600;
+            color: #5d6d7e;
+            font-size: 14px;
+        }
+
+        .change-value {
+            font-weight: bold;
+            color: #2c3e50;
+            font-size: 14px;
+        }
+
+        .change-diff {
+            font-weight: bold;
             font-size: 12px;
-            display: inline-block;
-            min-width: 70px;
+            padding: 2px 6px;
+            border-radius: 10px;
+            min-width: 40px;
             text-align: center;
         }
-        
-        .signal-strong { background: #4caf50; color: white; }
-        .signal-medium { background: #ff9800; color: white; }
-        .signal-weak { background: #f44336; color: white; }
-        .signal-none { background: #9e9e9e; color: white; }
 
-        /* Прогресс-бар уверенности */
-        .confidence-bar {
-            width: 100%;
-            height: 8px;
-            background: #e0e0e0;
-            border-radius: 4px;
-            overflow: hidden;
-            margin-top: 4px;
+        .change-diff.positive {
+            background: rgba(0, 184, 148, 0.2);
+            color: #00b894;
         }
 
-        .confidence-fill {
-            height: 100%;
-            border-radius: 4px;
-            transition: width 0.3s ease;
+        .change-diff.negative {
+            background: rgba(225, 112, 85, 0.2);
+            color: #e17055;
         }
 
-        .confidence-high { background: linear-gradient(90deg, #4caf50, #8bc34a); }
-        .confidence-medium { background: linear-gradient(90deg, #ff9800, #ffb74d); }
-        .confidence-low { background: linear-gradient(90deg, #f44336, #ef5350); }
-
-        /* Цветовые статусы строк */
-        .tr-quality { background: #f8fff8 !important; }
-        .tr-caution { background: #fff8f0 !important; }
-        .tr-avoid { background: #fff0f0 !important; }
-        .tr-waiting { background: #f8f9fa !important; }
-
+        .change-diff.neutral {
+            background: rgba(99, 110, 114, 0.2);
+            color: #636e72;
+        }
+        /* Адаптивность */
         @media (max-width: 1200px) {
             .container {
                 margin: 10px;
@@ -318,7 +347,28 @@
             </div>
         </div>
     </div>
-
+    <div id="changeIndicator" class="change-indicator">
+        <div class="change-content">
+            <div class="change-header">🔄 Обновление данных</div>
+            <div class="change-stats">
+                <div class="change-item">
+                    <span class="change-label">Очки:</span>
+                    <span class="change-value" id="changePoints">0</span>
+                    <span class="change-diff" id="changePointsDiff">+0</span>
+                </div>
+                <div class="change-item">
+                    <span class="change-label">Темп:</span>
+                    <span class="change-value" id="changePace">0</span>
+                    <span class="change-diff" id="changePaceDiff">+0</span>
+                </div>
+                <div class="change-item">
+                    <span class="change-label">Тотал:</span>
+                    <span class="change-value" id="changeTotal">0</span>
+                    <span class="change-diff" id="changeTotalDiff">+0</span>
+                </div>
+            </div>
+        </div>
+    </div>
     <script>
         let currentChart = null;
         let wsConnected = false;
@@ -349,187 +399,6 @@
             }
         }
 
-        // Система анализа матчей
-        class MatchAnalyzer {
-            constructor() {
-                this.patterns = {
-                    ACCELERATION: 'acceleration',
-                    DIVERGENCE: 'divergence', 
-                    COMPRESSION: 'compression'
-                };
-            }
-
-            // ЭТАП 1: Фильтрация контекста
-            analyzeContext(match) {
-                const filters = {
-                    tooEarly: match.minutes_elapsed < 8,  // Ужесточено: было 5
-                    tooLate: match.minutes_elapsed > 32,  // Ужесточено: было 35
-                    isBlowout: this.isBlowout(match.score),
-                    unknownTournament: this.isUnknownTournament(match.tournament)
-                };
-
-                const failedFilters = Object.values(filters).filter(Boolean).length;
-                
-                return {
-                    quality: failedFilters === 0 ? 'HIGH' : failedFilters <= 1 ? 'MEDIUM' : 'LOW',
-                    failedFilters: Object.keys(filters).filter(key => filters[key])
-                };
-            }
-
-            // БАЗОВЫЙ АНАЛИЗ ПО ОТКЛОНЕНИЮ (работает всегда)
-            analyzeByDeviation(match) {
-                const deviation = match.total_deviation || 0;
-                const minutes = match.minutes_elapsed || 0;
-                
-                // Ужесточенные правила по отклонению
-                if (deviation > 20 && minutes > 10) {  // Ужесточено: было >15
-                    return { patterns: ['strong_deviation'], confidence: 70 };
-                }
-                if (deviation > 15 && minutes > 8) {   // Ужесточено: было >10
-                    return { patterns: ['medium_deviation'], confidence: 50 };
-                }
-                if (deviation > 10 && minutes > 6) {   // Ужесточено: было >5
-                    return { patterns: ['weak_deviation'], confidence: 30 };
-                }
-                if (Math.abs(deviation) > 7 && minutes > 4) {  // Ужесточено: было >3
-                    return { patterns: ['minimal_deviation'], confidence: 20 };
-                }
-                
-                return { patterns: [], confidence: 0 };
-            }
-
-            // ЭТАП 2: Детекция паттернов
-            detectPatterns(match) {
-                let patterns = [];
-                let confidence = 0;
-
-                const deviation = match.total_deviation || 0;
-                const minutes = match.minutes_elapsed || 0;
-
-                console.log(`🔍 DetectPatterns для "${match.teams}":`, {
-                    deviation, minutes,
-                    total_change: match.total_change_percent,
-                    pace_change: match.pace_change_percent
-                });
-
-                // 1. БАЗОВЫЙ АНАЛИЗ ПО ОТКЛОНЕНИЮ
-                const deviationAnalysis = this.analyzeByDeviation(match);
-                patterns = patterns.concat(deviationAnalysis.patterns);
-                confidence += deviationAnalysis.confidence;
-
-                // 2. ПАТТЕРНЫ (дополнительные бонусы - уменьшены)
-                if (this.detectAccelerationPattern(match)) {
-                    patterns.push(this.patterns.ACCELERATION);
-                    confidence += 10;  // Уменьшено: было 15
-                    console.log('✅ Обнаружен паттерн ACCELERATION');
-                }
-
-                if (this.detectDivergencePattern(match)) {
-                    patterns.push(this.patterns.DIVERGENCE);
-                    confidence += 7;   // Уменьшено: было 10
-                    console.log('✅ Обнаружен паттерн DIVERGENCE');
-                }
-
-                if (this.detectCompressionPattern(match)) {
-                    patterns.push(this.patterns.COMPRESSION);
-                    confidence += 5;   // Уменьшено: было 8
-                    console.log('✅ Обнаружен паттерн COMPRESSION');
-                }
-
-                // 3. УБРАНЫ ЛЕГКИЕ БОНУСЫ
-                // if (deviation > 5 && deviation < 25) { confidence += 8; }
-                // if (minutes > 8 && minutes < 35) { confidence += 5; }
-
-                // МИНИМАЛЬНЫЙ УРОВЕНЬ УВЕРЕННОСТИ если есть отклонение
-                if (Math.abs(deviation) > 12 && confidence < 25) {  // Ужесточено: было >8
-                    confidence = 25;
-                    console.log('✅ Минимальная уверенность за отклонение >12%');
-                }
-
-                console.log(`📊 Итог: patterns=${patterns.length}, confidence=${confidence}`);
-                return { patterns, confidence: Math.min(confidence, 95) };
-            }
-
-            // Упрощенные методы детекции
-            detectAccelerationPattern(match) {
-                const deviation = match.total_deviation || 0;
-                const minutes = match.minutes_elapsed || 0;
-                return deviation > 2 && minutes > 6;
-            }
-
-            detectDivergencePattern(match) {
-                return match.total_change_percent !== undefined && 
-                       match.pace_change_percent !== undefined;
-            }
-
-            detectCompressionPattern(match) {
-                const deviation = match.total_deviation || 0;
-                return Math.abs(deviation) > 4;
-            }
-
-            // ЭТАП 3: Определение фазы и сигнала
-            determinePhase(match, analysis) {
-                const { quality, failedFilters } = analysis.context;
-                const { patterns, confidence } = analysis.patterns;
-
-                console.log(`🎯 DeterminePhase: quality=${quality}, patterns=${patterns.length}, confidence=${confidence}`);
-
-                // Базовые условия
-                if (quality === 'LOW') {
-                    return { phase: 'waiting', signal: 'none', confidence: 0 };
-                }
-
-                // ОПРЕДЕЛЯЕМ НАПРАВЛЕНИЕ
-                const deviation = match.total_deviation || 0;
-                const isOverPotential = deviation > 2;
-                const isUnderPotential = deviation < -2;
-
-                console.log(`📈 Направление: deviation=${deviation}, over=${isOverPotential}, under=${isUnderPotential}`);
-
-                let phase = 'analysis';
-                let signal = 'none';
-
-                // УЖЕСТОЧЕННЫЕ ПРАВИЛА
-                if (confidence >= 70) {  // Ужесточено: было 60
-                    signal = 'strong';
-                    phase = isOverPotential ? 'over' : (isUnderPotential ? 'under' : 'analysis');
-                } else if (confidence >= 55) {  // Ужесточено: было 40
-                    signal = 'medium';
-                    phase = isOverPotential ? 'over' : (isUnderPotential ? 'under' : 'analysis');
-                } else if (confidence >= 35) {  // Ужесточено: было 20
-                    signal = 'weak';
-                }
-
-                // ЕСЛИ ЕСТЬ ОТКЛОНЕНИЕ >15% - СИГНАЛ СРЕДНИЙ (Ужесточено: было >10)
-                if (Math.abs(deviation) > 15 && signal === 'none' && confidence > 15) {
-                    signal = 'medium';
-                    phase = isOverPotential ? 'over' : 'under';
-                }
-
-                console.log(`🎯 Финальный результат: phase=${phase}, signal=${signal}, confidence=${confidence}`);
-                return { phase, signal, confidence };
-            }
-
-            // Вспомогательные методы
-            isBlowout(score) {
-                if (!score || score === '-') return false;
-                try {
-                    const [home, away] = score.split(':').map(Number);
-                    return Math.abs(home - away) > 20;
-                } catch {
-                    return false;
-                }
-            }
-
-            isUnknownTournament(tournament) {
-                const knownTournaments = ['ЕВРОЛИГА', 'ЕВРОКУБОК', 'NBA', 'VTB', 'ACB', 'ЛЧ'];
-                return !knownTournaments.some(known => tournament.includes(known));
-            }
-        }
-
-        // Инициализируем анализатор
-        const matchAnalyzer = new MatchAnalyzer();
-
         // Функция расчета минут матча из времени
         function calculateMinutesElapsed(currentTime) {
             if (!currentTime || currentTime === '-') return 0;
@@ -544,7 +413,7 @@
             }
         }
 
-        // Функция обновления таблицы
+        // Функция обновления таблицы матчей
         function updateTable(matches) {
             console.log('🔄 updateTable called with', matches?.length, 'matches');
             
@@ -558,12 +427,9 @@
 
             document.getElementById('stats').innerHTML = 
                 `📊 Матчей: ${matches.length} | 🔄 ${new Date().toLocaleTimeString()}`;
-
-            // Отладочный вывод первого матча
-            if (matches.length > 0) {
-                console.log('🔍 Первый матч для анализа:', matches[0]);
-            }
-
+            const sortedMatches = [...matches].sort((a, b) => {
+                return (a.tournament || 'Без турнира').localeCompare(b.tournament || 'Без турнира');
+            });
             let html = `
                 <table>
                     <thead>
@@ -576,42 +442,24 @@
                             <th>Тек. тотал</th>
                             <th>Темп</th>
                             <th>Отклонение</th>
-                            <th>Фаза</th>
-                            <th>Сигнал</th>
-                            <th>Уверенность</th>
                         </tr>
                     </thead>
                     <tbody>
             `;
 
-            matches.forEach(match => {
+            sortedMatches.forEach(match => {
                 // Расчет minutes_elapsed если его нет
                 if (!match.minutes_elapsed && match.current_time && match.current_time !== '-') {
                     match.minutes_elapsed = calculateMinutesElapsed(match.current_time);
                 }
                 
-                // Анализируем матч
-                const contextAnalysis = matchAnalyzer.analyzeContext(match);
-                const patternAnalysis = matchAnalyzer.detectPatterns(match);
-                const phaseAnalysis = matchAnalyzer.determinePhase(match, {
-                    context: contextAnalysis,
-                    patterns: patternAnalysis
-                });
-
-                // Применяем цветовую схему
-                const rowClass = getRowClass(phaseAnalysis);
                 const deviationClass = getDeviationClass(match.total_deviation);
                 
                 html += `
-                    <tr class="${rowClass}" onclick="showMatchChart(${match.id}, '${escapeHtml(match.teams)}')">
+                    <tr onclick="showMatchChart(${match.id}, '${escapeHtml(match.teams)}')">
                         <td>
                             <div class="match-teams">${match.teams}</div>
                             <div class="tournament">${match.tournament}</div>
-                            ${contextAnalysis.failedFilters.length > 0 ? 
-                                `<div class="negative" style="font-size: 10px; margin-top: 2px;">
-                                    ⚠️ ${contextAnalysis.failedFilters.join(', ')}
-                                </div>` : ''
-                            }
                         </td>
                         <td><strong>${match.current_time}</strong></td>
                         <td><strong>${match.score}</strong></td>
@@ -624,28 +472,6 @@
                                 ${match.total_deviation ? `${match.total_deviation > 0 ? '+' : ''}${match.total_deviation}%` : '-'}
                             </span>
                         </td>
-                        <td>
-                            <span class="phase-${phaseAnalysis.phase}">
-                                ${getPhaseIcon(phaseAnalysis.phase)} ${getPhaseText(phaseAnalysis.phase)}
-                            </span>
-                        </td>
-                        <td>
-                            ${phaseAnalysis.signal !== 'none' ? 
-                                `<span class="signal-${phaseAnalysis.signal}">
-                                    ${getSignalText(phaseAnalysis.signal)}
-                                </span>` : 
-                                '<span class="signal-none">-</span>'
-                            }
-                        </td>
-                        <td>
-                            <div style="font-size: 12px; font-weight: bold; color: #2c3e50;">
-                                ${phaseAnalysis.confidence}%
-                            </div>
-                            <div class="confidence-bar">
-                                <div class="confidence-fill ${getConfidenceClass(phaseAnalysis.confidence)}" 
-                                    style="width: ${phaseAnalysis.confidence}%"></div>
-                            </div>
-                        </td>
                     </tr>
                 `;
             });
@@ -655,50 +481,6 @@
         }
 
         // Вспомогательные функции
-        function getRowClass(analysis) {
-            if (analysis.phase === 'over') return 'tr-quality';
-            if (analysis.phase === 'under') return 'tr-caution';
-            if (analysis.signal === 'weak') return 'tr-waiting';
-            if (analysis.phase === 'waiting') return 'tr-waiting';
-            return '';
-        }
-
-        function getPhaseIcon(phase) {
-            const icons = {
-                'analysis': '📊',
-                'over': '🟢', 
-                'under': '🔴',
-                'waiting': '⚪'
-            };
-            return icons[phase] || '📊';
-        }
-
-        function getPhaseText(phase) {
-            const texts = {
-                'analysis': 'Анализ',
-                'over': 'OVER',
-                'under': 'UNDER', 
-                'waiting': 'Ожидание'
-            };
-            return texts[phase] || 'Анализ';
-        }
-
-        function getSignalText(signal) {
-            const texts = {
-                'strong': 'Сильный',
-                'medium': 'Средний',
-                'weak': 'Слабый',
-                'none': 'Нет'
-            };
-            return texts[signal] || 'Нет';
-        }
-
-        function getConfidenceClass(confidence) {
-            if (confidence >= 70) return 'confidence-high';
-            if (confidence >= 40) return 'confidence-medium';
-            return 'confidence-low';
-        }
-
         function getDeviationClass(deviation) {
             if (!deviation) return 'neutral';
             if (deviation > 5) return 'positive';
@@ -712,7 +494,7 @@
             return div.innerHTML;
         }
 
-        // WebSocket соединение
+        // WebSocket соединение для live-обновлений
         function connectWebSocket() {
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const wsUrl = `${protocol}//${window.location.host}/ws`;
@@ -751,50 +533,102 @@
             };
         }
 
-        // Функции для графика (упрощенные)
-        function updateOpenChart(matches) {
-            if (!currentOpenMatchId || !currentChart) return;
-            const currentMatch = matches.find(match => match.id === currentOpenMatchId);
-            if (currentMatch) {
-                updateChartData(currentOpenMatchId, currentMatch);
-            }
+        // Функции для обновления легенды графика
+        function updateLegendLabels(chart) {
+            const datasets = chart.data.datasets;
+            return datasets.map((dataset, index) => {
+                let label = dataset.originalLabel || dataset.label || '';
+                
+                return {
+                    text: label,
+                    fillStyle: dataset.borderColor,
+                    strokeStyle: dataset.borderColor,
+                    lineWidth: 2,
+                    pointStyle: dataset.pointStyle,
+                    hidden: !chart.isDatasetVisible(index),
+                    index: index
+                };
+            });
         }
 
-        function updateChartData(matchId, matchData) {
-            fetch(`/api/matches/${matchId}/chart`)
-                .then(response => response.json())
-                .then(data => {
-                    if (!data.error) {
-                        refreshChart(data);
-                        updateChartTitle(matchData);
-                    }
-                })
-                .catch(error => console.error('❌ Error updating chart:', error));
+        function updateDatasetLabels(chart) {
+            if (!chart || !chart.data || !chart.data.datasets) return;
+            
+            chart.data.datasets.forEach((dataset, index) => {
+                dataset.label = dataset.originalLabel || dataset.label || '';
+            });
+        }
+
+        // Функции для графика
+        function updateOpenChart(matches) {
+            if (!currentOpenMatchId || !currentChart) return;
+            
+            const currentMatch = matches.find(match => match.id === currentOpenMatchId);
+            if (currentMatch) {
+                // Получаем свежие данные для графика
+                fetch(`/api/matches/${currentOpenMatchId}/chart`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (!data.error) {
+                            refreshChart(data);
+                        }
+                    })
+                    .catch(error => console.error('❌ Error updating chart:', error));
+            }
         }
 
         function refreshChart(newData) {
             if (!currentChart || !newData.timestamps) return;
+            // ПОКАЗЫВАЕМ ИНДИКАТОР ИЗМЕНЕНИЙ
+            showChangesIndicator(newData);            
             window.currentChartData = newData;
+            
+            // Обновляем данные
             currentChart.data.labels = newData.timestamps;
             currentChart.data.datasets[0].data = newData.total_points;
             currentChart.data.datasets[1].data = newData.total_values;
             currentChart.data.datasets[2].data = newData.pace_data;
-            currentChart.update('none');
+            
+            // Обновляем labels в datasets
+            updateDatasetLabels(currentChart);
+            
+            // Принудительно обновляем график
+            currentChart.update('active');
+            
+            // Обновляем заголовок
+            updateChartTitleFromData(newData);
         }
 
-        function updateChartTitle(matchData) {
+        function updateChartTitleFromData(chartData) {
+            if (!chartData.timestamps || chartData.timestamps.length === 0) return;
+            
+            const lastIndex = chartData.timestamps.length - 1;
+            const currentValues = {
+                totalPoints: chartData.total_points[lastIndex] || '-',
+                totalValue: chartData.total_values[lastIndex] || '-',
+                pace: chartData.pace_data[lastIndex] || '-',
+                timestamp: chartData.timestamps[lastIndex] || '-',
+                score: chartData.scores ? chartData.scores[lastIndex] : '-'
+            };
+            
             const chartTitle = document.getElementById('chartTitle');
-            if (chartTitle && matchData) {
+            if (chartTitle && currentOpenMatchId) {
+                const matchInfo = getMatchInfoByMatchId(currentOpenMatchId);
                 chartTitle.innerHTML = `
-                    <div style="text-align: center; padding: 10px 0;">
-                        <div style="font-size: 20px; font-weight: bold; color: #2c3e50; margin-bottom: 6px;">
-                            ${matchData.teams}
+                    <div style="text-align: center; padding: 5px 0;">
+                        <div style="font-size: 20px; font-weight: bold; color: #2c3e50; margin-bottom: 3px;">
+                            ${matchInfo.teams}
                         </div>
-                        <div style="font-size: 15px; color: #5d6d7e; margin-bottom: 4px;">
-                            ${matchData.tournament}
+                        <div style="font-size: 14px; color: #5d6d7e; margin-bottom: 4px;">
+                            ${matchInfo.tournament} 
                         </div>
-                        <div style="font-size: 14px; color: #7f8c8d; background: #f8f9fa; padding: 4px 12px; border-radius: 12px; display: inline-block;">
-                            ⏱️ Текущее время: <strong>${matchData.current_time}</strong>
+                        <div style="font-size: 16px; color: #7f8c8d; background: #f8f9fa; padding: 6px 12px; border-radius: 12px; margin-bottom: 3px;">
+                            ⏱️ ${currentValues.timestamp} | 📊 ${currentValues.score}
+                        </div>
+                        <div style="font-size: 16px; color: #2c3e50; background: #e8f4fd; padding: 4px 10px; border-radius: 8px; margin-top: 2px;">
+                            🏀 Очки: <strong>${currentValues.totalPoints}</strong> | 
+                            📈 Тотал: <strong>${currentValues.totalValue}</strong> | 
+                            ⚡ Темп: <strong>${currentValues.pace}</strong>
                         </div>
                     </div>
                 `;
@@ -803,26 +637,31 @@
 
         // Функция для получения информации о матче
         function getMatchInfoByMatchId(matchId) {
-            const rows = document.querySelectorAll('#matches-table tr');
+            // Ищем матч в текущих данных таблицы
+            const rows = document.querySelectorAll('#matches-table tbody tr');
             for (let row of rows) {
-                const matchTeams = row.querySelector('.match-teams');
-                if (matchTeams) {
-                    const onclickAttr = row.getAttribute('onclick');
-                    if (onclickAttr && onclickAttr.includes(`showMatchChart(${matchId},`)) {
-                        const tournamentElement = row.querySelector('.tournament');
-                        const timeElement = row.querySelector('td:nth-child(2) strong');
-                        return {
-                            tournament: tournamentElement ? tournamentElement.textContent : 'Неизвестный турнир',
-                            currentTime: timeElement ? timeElement.textContent : '-',
-                            teams: matchTeams.textContent
-                        };
-                    }
+                const onclickAttr = row.getAttribute('onclick');
+                if (onclickAttr && onclickAttr.includes(`showMatchChart(${matchId},`)) {
+                    const matchTeams = row.querySelector('.match-teams');
+                    const tournamentElement = row.querySelector('.tournament');
+                    const timeElement = row.querySelector('td:nth-child(2) strong');
+                    const scoreElement = row.querySelector('td:nth-child(3) strong');
+                    
+                    return {
+                        tournament: tournamentElement ? tournamentElement.textContent : 'Неизвестный турнир',
+                        currentTime: timeElement ? timeElement.textContent : '-',
+                        teams: matchTeams ? matchTeams.textContent : 'Неизвестные команды',
+                        score: scoreElement ? scoreElement.textContent : '-'
+                    };
                 }
             }
+            
+            // Если не нашли в таблице, возвращаем значения по умолчанию
             return {
                 tournament: 'Неизвестный турнир',
                 currentTime: '-',
-                teams: 'Неизвестные команды'
+                teams: 'Неизвестные команды',
+                score: '-'
             };
         }
 
@@ -839,8 +678,8 @@
                     }
                     
                     document.getElementById('chartTitle').innerHTML = `
-                        <div style="text-align: center; padding: 10px 0;">
-                            <div style="font-size: 20px; font-weight: bold; color: #2c3e50; margin-bottom: 6px;">
+                        <div style="text-align: center; padding: 5px 0;">
+                            <div style="font-size: 20px; font-weight: bold; color: #2c3e50; margin-bottom: 3px;">
                                 ${teams}
                             </div>
                             <div style="font-size: 15px; color: #5d6d7e; margin-bottom: 4px;">
@@ -861,32 +700,21 @@
                 });
         }
 
-        function getCurrentValues(chartData) {
-            if (!chartData || !chartData.total_points || chartData.total_points.length === 0) {
-                return { totalPoints: '-', totalValue: '-', pace: '-' };
-            }
-            const lastIndex = chartData.total_points.length - 1;
-            return {
-                totalPoints: chartData.total_points[lastIndex] || '-',
-                totalValue: chartData.total_values[lastIndex] || '-',
-                pace: chartData.pace_data[lastIndex] || '-'
-            };
-        }
-
         function createChart(chartData, teams, tournament, currentTime) {
             const ctx = document.getElementById('matchChart').getContext('2d');
             if (currentChart) currentChart.destroy();
             
             window.currentChartData = chartData;
-            const currentValues = getCurrentValues(chartData);
-            
+            // СБРАСЫВАЕМ ПРЕДЫДУЩИЕ ДАННЫЕ ПРИ СОЗДАНИИ НОВОГО ГРАФИКА
+            previousChartData = null;
             currentChart = new Chart(ctx, {
                 type: 'line',
                 data: {
                     labels: chartData.timestamps,
                     datasets: [
                         {
-                            label: `Очки: ${currentValues.totalPoints}`,
+                            label: 'Очки',  // ПРОСТОЕ НАЗВАНИЕ БЕЗ ЗНАЧЕНИЙ
+                            originalLabel: 'Очки',
                             data: chartData.total_points,
                             borderColor: 'rgb(75, 192, 192)',
                             backgroundColor: 'rgba(75, 192, 192, 0.1)',
@@ -895,7 +723,8 @@
                             fill: false
                         },
                         {
-                            label: `Линия тотала: ${currentValues.totalValue}`,
+                            label: 'Линия тотала',  // ПРОСТОЕ НАЗВАНИЕ БЕЗ ЗНАЧЕНИЙ
+                            originalLabel: 'Линия тотала',
                             data: chartData.total_values,
                             borderColor: 'rgb(255, 99, 132)',
                             backgroundColor: 'rgba(255, 99, 132, 0.1)',
@@ -905,7 +734,8 @@
                             fill: false
                         },
                         {
-                            label: `Темп игры: ${currentValues.pace}`,
+                            label: 'Темп игры',  // ПРОСТОЕ НАЗВАНИЕ БЕЗ ЗНАЧЕНИЙ
+                            originalLabel: 'Темп игры',
                             data: chartData.pace_data,
                             borderColor: 'rgb(153, 102, 255)',
                             backgroundColor: 'rgba(153, 102, 255, 0.1)',
@@ -919,16 +749,30 @@
                 },
                 options: {
                     responsive: true,
-                    maintainAspectRatio: false,
+                    maintainAspectRatio: false,  // Позволяет ручное управление размером
                     interaction: { mode: 'index', intersect: false },
                     scales: {
                         x: { 
-                            title: { display: true, text: 'Время матча' },
-                            grid: { color: 'rgba(0, 0, 0, 0.1)' }
+                            title: { 
+                                display: true, 
+                                text: 'Время матча',
+                                font: { size: 14 }  // Размер текста оси X
+                            },
+                            grid: { color: 'rgba(0, 0, 0, 0.1)' },
+                            ticks: {
+                                font: { size: 12 }  // Размер подписей оси X
+                            }
                         },
                         y: { 
-                            title: { display: true, text: 'Очки / Темп' },
-                            grid: { color: 'rgba(0, 0, 0, 0.1)' }
+                            title: { 
+                                display: true, 
+                                text: 'Очки / Темп',
+                                font: { size: 14 }  // Размер текста оси Y
+                            },
+                            grid: { color: 'rgba(0, 0, 0, 0.1)' },
+                            ticks: {
+                                font: { size: 12 }  // Размер подписей оси Y
+                            }
                         }
                     },
                     plugins: {
@@ -939,20 +783,153 @@
                                     const timestamp = window.currentChartData.timestamps[index];
                                     const score = window.currentChartData.scores ? window.currentChartData.scores[index] : 'N/A';
                                     return `Время: ${timestamp} | Счет: ${score}`;
+                                },
+                                label: function(context) {
+                                    const datasetLabel = context.dataset.originalLabel || context.dataset.label || '';
+                                    const value = context.parsed.y;
+                                    
+                                    // Простые названия в тултипах
+                                    if (datasetLabel === 'Очки') {
+                                        return `Очки: ${value}`;
+                                    } else if (datasetLabel === 'Линия тотала') {
+                                        return `Тотал: ${value}`;
+                                    } else if (datasetLabel === 'Темп игры') {
+                                        return `Темп: ${value}`;
+                                    }
+                                    return `${datasetLabel}: ${value}`;
                                 }
                             }
                         },
                         legend: {
                             display: true,
-                            position: 'top'
+                            position: 'bottom',  // ЛЕГЕНДА ПОД ГРАФИКОМ
+                            align: 'center',
+                            labels: {
+                                generateLabels: updateLegendLabels,  // Используем упрощенные labels
+                                font: {
+                                    size: 14,  // Размер шрифта легенды
+                                    family: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif"
+                                },
+                                padding: 20,    // Отступы в легенде
+                                boxWidth: 15,   // Ширина цветного квадрата
+                                usePointStyle: true  // Использовать точки вместо квадратов
+                            }
                         }
+                    },
+                    animation: {
+                        duration: 0  // Без анимации для быстрого обновления
                     }
                 }
             });
+            
+            // Сразу обновляем легенду с чистыми названиями
+            updateDatasetLabels(currentChart);
+            currentChart.update('active');
+        }
+        // Добавьте в начало с другими переменными
+        let previousChartData = null;
+        let changeIndicatorTimeout = null;
+
+        // Функция для показа изменений
+        function showChangesIndicator(newData) {
+            if (!previousChartData || !newData.timestamps || newData.timestamps.length === 0) {
+                previousChartData = JSON.parse(JSON.stringify(newData));
+                return;
+            }
+            
+            const newIndex = newData.timestamps.length - 1;
+            const oldIndex = previousChartData.timestamps.length - 1;
+            
+            // Если нет старых данных или индексы невалидны
+            if (oldIndex < 0 || newIndex < 0) {
+                previousChartData = JSON.parse(JSON.stringify(newData));
+                return;
+            }
+            
+            // Если временные метки совпадают, нет новых данных
+            if (newData.timestamps[newIndex] === previousChartData.timestamps[oldIndex]) {
+                return;
+            }
+            
+            // Получаем последние значения (с защитой от undefined)
+            const newPoints = newData.total_points[newIndex] || 0;
+            const newPace = newData.pace_data[newIndex] || 0;
+            const newTotal = newData.total_values[newIndex] || 0;
+            
+            const oldPoints = previousChartData.total_points[oldIndex] || 0;
+            const oldPace = previousChartData.pace_data[oldIndex] || 0;
+            const oldTotal = previousChartData.total_values[oldIndex] || 0;
+            
+            // Рассчитываем изменения
+            const pointsDiff = newPoints - oldPoints;
+            const paceDiff = newPace - oldPace;
+            const totalDiff = newTotal - oldTotal;
+            
+            // Показываем табло только если есть значимые изменения
+            if (Math.abs(pointsDiff) > 0.1 || Math.abs(paceDiff) > 0.1 || Math.abs(totalDiff) > 0.1) {
+                updateChangeIndicator({
+                    points: { value: newPoints, diff: pointsDiff },
+                    pace: { value: newPace, diff: paceDiff },
+                    total: { value: newTotal, diff: totalDiff }
+                });
+            }
+            
+            // Сохраняем текущие данные для следующего сравнения
+            previousChartData = JSON.parse(JSON.stringify(newData));
         }
 
-        // Инициализация при загрузке
+        // Функция обновления индикатора
+        function updateChangeIndicator(changes) {
+            const indicator = document.getElementById('changeIndicator');
+            const pointsElem = document.getElementById('changePoints');
+            const paceElem = document.getElementById('changePace');
+            const totalElem = document.getElementById('changeTotal');
+            const pointsDiffElem = document.getElementById('changePointsDiff');
+            const paceDiffElem = document.getElementById('changePaceDiff');
+            const totalDiffElem = document.getElementById('changeTotalDiff');
+            
+            // Обновляем значения
+            pointsElem.textContent = changes.points.value.toFixed(1);
+            paceElem.textContent = changes.pace.value.toFixed(1);
+            totalElem.textContent = changes.total.value.toFixed(1);
+            
+            // Обновляем разницы с цветами
+            updateDiffElement(pointsDiffElem, changes.points.diff);
+            updateDiffElement(paceDiffElem, changes.pace.diff);
+            updateDiffElement(totalDiffElem, changes.total.diff);
+            
+            // Показываем индикатор
+            indicator.classList.add('show');
+            
+            // Сбрасываем предыдущий таймер
+            if (changeIndicatorTimeout) {
+                clearTimeout(changeIndicatorTimeout);
+            }
+            
+            // Скрываем через 2 секунды
+            changeIndicatorTimeout = setTimeout(() => {
+                indicator.classList.remove('show');
+            }, 2000);
+        }
+
+        // Функция обновления элемента разницы
+        function updateDiffElement(element, diff) {
+            const absDiff = Math.abs(diff);
+            
+            if (diff > 0) {
+                element.textContent = `+${absDiff.toFixed(1)}`;
+                element.className = 'change-diff positive';
+            } else if (diff < 0) {
+                element.textContent = `-${absDiff.toFixed(1)}`;
+                element.className = 'change-diff negative';
+            } else {
+                element.textContent = '0.0';
+                element.className = 'change-diff neutral';
+            }
+        }
+        // Инициализация при загрузке страницы
         document.addEventListener('DOMContentLoaded', function() {
+            // Первоначальная загрузка данных
             fetch('/api/matches')
                 .then(response => response.json())
                 .then(data => updateTable(data.matches))
@@ -962,6 +939,7 @@
                         '<div class="loading">❌ Ошибка загрузки данных</div>';
                 });
 
+            // Подключаем WebSocket для live-обновлений
             connectWebSocket();
         });
     </script>

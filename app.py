@@ -12,10 +12,6 @@ from match_monitor import MatchMonitor
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('basketball_parser.log'),
-        logging.StreamHandler()
-    ]
 )
 
 

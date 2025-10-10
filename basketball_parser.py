@@ -11,13 +11,14 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
 from config import (BROWSER_CONFIG, MATCH_TIME_CONFIG, PARSER_CONFIG,
-                    SITE_CONFIG)
+                    SITE_CONFIG, MATCH_FILTERS)
 
 
 class BasketballParser:
     def __init__(self):
         self.driver = None
         self.wait = None
+        self.banned_tournaments = MATCH_FILTERS['BANNED_TOURNAMENTS']
 
     def setup_driver(self):
         """Настройка браузера"""
@@ -62,7 +63,7 @@ class BasketballParser:
             return False
 
     def parse_matches(self):
-        """Парсинг всех матчей на странице"""
+        """Парсинг всех матчей на странице с фильтрацией"""
         try:
             matches = self.driver.find_elements(
                 By.CSS_SELECTOR, SITE_CONFIG['MATCH_CONTAINER'])
@@ -70,14 +71,33 @@ class BasketballParser:
 
             for match in matches:
                 match_data = self._parse_single_match(match)
-                if match_data:
+
+                # ФИЛЬТРАЦИЯ: проверяем разрешен ли турнир
+                if match_data and self._is_tournament_allowed(match_data):
                     parsed_data.append(match_data)
+                elif match_data:
+                    logging.debug(
+                        f"Пропущен матч из запрещенного турнира: {match_data['teams']}")
 
             return parsed_data
 
         except Exception as e:
             logging.error(f"Ошибка парсинга матчей: {e}")
             return []
+
+    def _is_tournament_allowed(self, match_data):
+        """Проверяет, разрешен ли турнир для обработки"""
+        tournament = match_data['tournament']
+
+        # Если турнир в списке запрещенных - пропускаем
+        if tournament in self.banned_tournaments:
+            return False
+
+        # Дополнительные проверки (если нужны)
+        if MATCH_FILTERS['EXCLUDE_WOMEN'] and '(ж)' in match_data['teams'].lower():
+            return False
+
+        return True
 
     def _parse_single_match(self, match_element):
         """Парсинг одного матча"""
@@ -153,7 +173,7 @@ class BasketballParser:
             }
 
         except Exception as e:
-            logging.error(f"Ошибка парсинга матча: {e}")
+            logging.debug(f"Ошибка парсинга матча: {e}")
             return None
 
     def _get_total_match_time(self, tournament, match_element):
