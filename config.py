@@ -15,11 +15,12 @@ PARSER_CONFIG = {
 BROWSER_CONFIG = {
     'HEADLESS': True,                 # без GUI для скорости
     'USER_AGENT': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-    'WINDOW_SIZE': '3840,2160',
+    'WINDOW_SIZE': '1920,1080',
     'DISABLE_LOGS': True,             # отключить логи браузера
     'SCALE_FACTOR': 0.5
 }
-
+#1920,1080
+#3840,2160
 # Настройки сайта
 SITE_CONFIG = {
     'URL': 'https://fon.bet/live/basketball',
