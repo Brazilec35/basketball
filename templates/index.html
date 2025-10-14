@@ -208,16 +208,16 @@
         }
         /* Стили для всплывающего табло изменений */
         .change-indicator {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%) scale(0.8);
+            position: fixed; /* ← Меняем на fixed */
+            top: 50%; /* ← Центрируем по вертикали */
+            left: 50%; /* ← Центрируем по горизонтали */
+            transform: translate(-50%, -50%) scale(0.8); /* ← Центрирование */
             background: rgba(255, 255, 255, 0.95);
             border: 2px solid #667eea;
             border-radius: 15px;
             padding: 15px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-            z-index: 1000;
+            z-index: 10000; /* ← Увеличиваем z-index */
             opacity: 0;
             transition: all 0.3s ease;
             pointer-events: none;
@@ -316,6 +316,33 @@
             table { font-size: 12px; }
             th, td { padding: 8px 4px; }
             .nav-links { flex-direction: column; gap: 10px; }
+        }
+        /* Стили для подсветки всей строки - ЯРЧЕ */
+        .row-positive { 
+            background: rgba(0, 184, 148, 0.15) !important; 
+            border-left: 4px solid #00b894;
+        }
+
+        .row-negative { 
+            background: rgba(225, 112, 85, 0.15) !important; 
+            border-left: 4px solid #e17055;
+        }
+
+        /* ЯВНО указываем цвета при ховере для подсвеченных строк */
+        table tr.row-positive:hover {
+            background: rgba(0, 184, 148, 0.25) !important; /* Ярче при ховере */
+            transform: none !important;
+        }
+
+        table tr.row-negative:hover {
+            background: rgba(225, 112, 85, 0.25) !important; /* Ярче при ховере */
+            transform: none !important;
+        }
+
+        /* Обычные строки */
+        table tr:hover:not(.row-positive):not(.row-negative) {
+            background-color: #f8f9fa;
+            transform: translateY(-1px);
         }
     </style>
 </head>
@@ -440,6 +467,7 @@
                             <th>Очки</th>
                             <th>Нач. тотал</th>
                             <th>Тек. тотал</th>
+                            <th>Δ Тотала</th>
                             <th>Темп</th>
                             <th>Отклонение</th>
                         </tr>
@@ -456,7 +484,7 @@
                 const deviationClass = getDeviationClass(match.total_deviation);
                 
                 html += `
-                    <tr onclick="showMatchChart(${match.id}, '${escapeHtml(match.teams)}')">
+                    <tr class="${match.initial_total && match.total_value ? getTotalDiffClass(match.total_value - match.initial_total, ((match.total_value - match.initial_total) / match.initial_total * 100)) : ''}" onclick="showMatchChart(${match.id}, '${escapeHtml(match.teams)}')">
                         <td>
                             <div class="match-teams">${match.teams}</div>
                             <div class="tournament">${match.tournament}</div>
@@ -466,6 +494,15 @@
                         <td>${match.total_points}</td>
                         <td>${match.initial_total || '-'}</td>
                         <td>${match.total_value || '-'}</td>
+                        <td>
+                            ${match.initial_total && match.total_value ? 
+                                `<span class="${getCellDiffClass((match.total_value - match.initial_total) / match.initial_total * 100)}">
+                                    ${(match.total_value - match.initial_total).toFixed(1)} 
+                                    (${((match.total_value - match.initial_total) / match.initial_total * 100).toFixed(1)}%)
+                                </span>` 
+                                : '-'
+                            }
+                        </td>                      
                         <td>${match.current_pace || '-'}</td>
                         <td>
                             <span class="${deviationClass}">
@@ -532,7 +569,19 @@
                 console.error('❌ WebSocket error:', error);
             };
         }
-
+        function getTotalDiffClass(diff, percent) {
+            if (!diff || diff === 0) return '';
+            
+            if (percent < -10) return 'row-negative';    // 🔴 Вся строка красная
+            if (percent > 10) return 'row-positive';     // 🟢 Вся строка зеленая
+            return '';                                   // ⚪ Без подсветки
+        }
+        function getCellDiffClass(percent) {
+            if (!percent) return 'neutral';
+            if (percent < -10) return 'negative';
+            if (percent > 10) return 'positive';
+            return 'neutral';
+        }
         // Функции для обновления легенды графика
         function updateLegendLabels(chart) {
             const datasets = chart.data.datasets;
@@ -579,15 +628,32 @@
 
         function refreshChart(newData) {
             if (!currentChart || !newData.timestamps) return;
+            
             // ПОКАЗЫВАЕМ ИНДИКАТОР ИЗМЕНЕНИЙ
             showChangesIndicator(newData);            
             window.currentChartData = newData;
             
-            // Обновляем данные
+            // Находим новые значения мин/макс тотала
+            const totalValues = newData.total_values.filter(val => val !== null && val !== undefined);
+            const maxTotal = totalValues.length > 0 ? Math.max(...totalValues) : null;
+            const minTotal = totalValues.length > 0 ? Math.min(...totalValues) : null;
+            
+            // Обновляем основные данные
             currentChart.data.labels = newData.timestamps;
             currentChart.data.datasets[0].data = newData.total_points;
             currentChart.data.datasets[1].data = newData.total_values;
             currentChart.data.datasets[2].data = newData.pace_data;
+            
+            // ОБНОВЛЯЕМ ЛИНИИ МИН/МАКС ТОТАЛА
+            if (maxTotal && currentChart.data.datasets[3]) {
+                currentChart.data.datasets[3].data = newData.timestamps.map(() => maxTotal);
+                currentChart.data.datasets[3].label = `Макс. тотал: ${maxTotal}`;
+            }
+            
+            if (minTotal && currentChart.data.datasets[4]) {
+                currentChart.data.datasets[4].data = newData.timestamps.map(() => minTotal);
+                currentChart.data.datasets[4].label = `Мин. тотал: ${minTotal}`;
+            }
             
             // Обновляем labels в datasets
             updateDatasetLabels(currentChart);
@@ -611,6 +677,26 @@
                 score: chartData.scores ? chartData.scores[lastIndex] : '-'
             };
             
+            // Находим максимальный тотал
+            const totalValues = chartData.total_values.filter(val => val !== null && val !== undefined);
+            const maxTotal = totalValues.length > 0 ? Math.max(...totalValues) : null;
+            
+            // Защита от отсутствия данных
+            const initialTotal = chartData.initial_total || (chartData.total_values && chartData.total_values[0]);
+            const currentTotal = chartData.total_values && chartData.total_values[lastIndex];
+            
+            let totalDiffHtml = '';
+            if (initialTotal && currentTotal) {
+                const totalDiff = (currentTotal - initialTotal).toFixed(1);
+                const totalDiffPercent = ((currentTotal - initialTotal) / initialTotal * 100).toFixed(1);
+                totalDiffHtml = `💹 Δ Тотала: <strong>${totalDiff > 0 ? '+' : ''}${totalDiff} (${totalDiffPercent > 0 ? '+' : ''}${totalDiffPercent}%)</strong>`;
+            }
+            
+            let maxTotalHtml = '';
+            if (maxTotal) {
+                maxTotalHtml = `📈 Макс. тотал: <strong>${maxTotal.toFixed(1)}</strong>`;
+            }
+            
             const chartTitle = document.getElementById('chartTitle');
             if (chartTitle && currentOpenMatchId) {
                 const matchInfo = getMatchInfoByMatchId(currentOpenMatchId);
@@ -627,8 +713,10 @@
                         </div>
                         <div style="font-size: 16px; color: #2c3e50; background: #e8f4fd; padding: 4px 10px; border-radius: 8px; margin-top: 2px;">
                             🏀 Очки: <strong>${currentValues.totalPoints}</strong> | 
-                            📈 Тотал: <strong>${currentValues.totalValue}</strong> | 
-                            ⚡ Темп: <strong>${currentValues.pace}</strong>
+                            📈 Тотал: <strong>${currentValues.totalValue}</strong> |
+                            ⚡ Темп: <strong>${currentValues.pace}</strong> |
+                            ${totalDiffHtml} |
+                            ${maxTotalHtml}
                         </div>
                     </div>
                 `;
@@ -705,7 +793,12 @@
             if (currentChart) currentChart.destroy();
             
             window.currentChartData = chartData;
-            // СБРАСЫВАЕМ ПРЕДЫДУЩИЕ ДАННЫЕ ПРИ СОЗДАНИИ НОВОГО ГРАФИКА
+            
+            // Находим максимальный и минимальный тотал
+            const totalValues = chartData.total_values.filter(val => val !== null && val !== undefined);
+            const maxTotal = totalValues.length > 0 ? Math.max(...totalValues) : null;
+            const minTotal = totalValues.length > 0 ? Math.min(...totalValues) : null;
+            
             previousChartData = null;
             currentChart = new Chart(ctx, {
                 type: 'line',
@@ -713,7 +806,7 @@
                     labels: chartData.timestamps,
                     datasets: [
                         {
-                            label: 'Очки',  // ПРОСТОЕ НАЗВАНИЕ БЕЗ ЗНАЧЕНИЙ
+                            label: 'Очки',
                             originalLabel: 'Очки',
                             data: chartData.total_points,
                             borderColor: 'rgb(75, 192, 192)',
@@ -723,7 +816,7 @@
                             fill: false
                         },
                         {
-                            label: 'Линия тотала',  // ПРОСТОЕ НАЗВАНИЕ БЕЗ ЗНАЧЕНИЙ
+                            label: 'Линия тотала',
                             originalLabel: 'Линия тотала',
                             data: chartData.total_values,
                             borderColor: 'rgb(255, 99, 132)',
@@ -734,7 +827,7 @@
                             fill: false
                         },
                         {
-                            label: 'Темп игры',  // ПРОСТОЕ НАЗВАНИЕ БЕЗ ЗНАЧЕНИЙ
+                            label: 'Темп игры',
                             originalLabel: 'Темп игры',
                             data: chartData.pace_data,
                             borderColor: 'rgb(153, 102, 255)',
@@ -744,34 +837,60 @@
                             pointStyle: 'circle',
                             pointRadius: 3,
                             fill: false
+                        },
+                        // Линия максимального тотала
+                        {
+                            label: `Макс. тотал: ${maxTotal}`,
+                            data: chartData.timestamps.map(() => maxTotal),
+                            borderColor: 'rgba(231, 76, 60, 0.8)',
+                            backgroundColor: 'rgba(231, 76, 60, 0.1)',
+                            borderWidth: 2,
+                            borderDash: [5, 5],
+                            pointRadius: 0,           // Убираем точки
+                            pointHoverRadius: 0,      // Убираем точки при ховере
+                            pointHitRadius: 0,        // Убираем зону клика
+                            fill: false
+                        },
+                        // Линия минимального тотала
+                        {
+                            label: `Мин. тотал: ${minTotal}`,
+                            data: chartData.timestamps.map(() => minTotal),
+                            borderColor: 'rgba(46, 204, 113, 0.8)',
+                            backgroundColor: 'rgba(46, 204, 113, 0.1)',
+                            borderWidth: 2,
+                            borderDash: [5, 5],
+                            pointRadius: 0,           // Убираем точки
+                            pointHoverRadius: 0,      // Убираем точки при ховере
+                            pointHitRadius: 0,        // Убираем зону клика
+                            fill: false
                         }
                     ]
                 },
                 options: {
                     responsive: true,
-                    maintainAspectRatio: false,  // Позволяет ручное управление размером
+                    maintainAspectRatio: false,
                     interaction: { mode: 'index', intersect: false },
                     scales: {
                         x: { 
                             title: { 
                                 display: true, 
                                 text: 'Время матча',
-                                font: { size: 14 }  // Размер текста оси X
+                                font: { size: 14 }
                             },
                             grid: { color: 'rgba(0, 0, 0, 0.1)' },
                             ticks: {
-                                font: { size: 12 }  // Размер подписей оси X
+                                font: { size: 12 }
                             }
                         },
                         y: { 
                             title: { 
                                 display: true, 
                                 text: 'Очки / Темп',
-                                font: { size: 14 }  // Размер текста оси Y
+                                font: { size: 14 }
                             },
                             grid: { color: 'rgba(0, 0, 0, 0.1)' },
                             ticks: {
-                                font: { size: 12 }  // Размер подписей оси Y
+                                font: { size: 12 }
                             }
                         }
                     },
@@ -788,13 +907,16 @@
                                     const datasetLabel = context.dataset.originalLabel || context.dataset.label || '';
                                     const value = context.parsed.y;
                                     
-                                    // Простые названия в тултипах
                                     if (datasetLabel === 'Очки') {
                                         return `Очки: ${value}`;
                                     } else if (datasetLabel === 'Линия тотала') {
                                         return `Тотал: ${value}`;
                                     } else if (datasetLabel === 'Темп игры') {
                                         return `Темп: ${value}`;
+                                    } else if (datasetLabel.includes('Макс. тотал')) {
+                                        return `Макс. тотал: ${value}`;
+                                    } else if (datasetLabel.includes('Мин. тотал')) {
+                                        return `Мин. тотал: ${value}`;
                                     }
                                     return `${datasetLabel}: ${value}`;
                                 }
@@ -802,27 +924,26 @@
                         },
                         legend: {
                             display: true,
-                            position: 'bottom',  // ЛЕГЕНДА ПОД ГРАФИКОМ
+                            position: 'bottom',
                             align: 'center',
                             labels: {
-                                generateLabels: updateLegendLabels,  // Используем упрощенные labels
+                                generateLabels: updateLegendLabels,
                                 font: {
-                                    size: 14,  // Размер шрифта легенды
+                                    size: 14,
                                     family: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif"
                                 },
-                                padding: 20,    // Отступы в легенде
-                                boxWidth: 15,   // Ширина цветного квадрата
-                                usePointStyle: true  // Использовать точки вместо квадратов
+                                padding: 20,
+                                boxWidth: 15,
+                                usePointStyle: true
                             }
                         }
                     },
                     animation: {
-                        duration: 0  // Без анимации для быстрого обновления
+                        duration: 0
                     }
                 }
             });
             
-            // Сразу обновляем легенду с чистыми названиями
             updateDatasetLabels(currentChart);
             currentChart.update('active');
         }

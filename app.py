@@ -78,7 +78,7 @@ class BasketballApp:
 
                 logging.info(f"Сохранено матчей: {saved_count}")
                 update_count += 1
-                time.sleep(10)
+                time.sleep(5)
 
             except Exception as e:
                 logging.error(f"Ошибка в основном цикле: {e}")
