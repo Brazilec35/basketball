@@ -2,12 +2,15 @@
 """
 Веб-интерфейс на FastAPI
 """
+import threading
+import atexit
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
 import json
 import logging
 import asyncio
+import time
 from datetime import datetime
 from database import Database, safe_int, safe_float
 
@@ -183,7 +186,8 @@ async def get_match_chart(match_id: int):
             total_values.append(total_value)
 
             # ВЫЧИСЛЯЕМ ТЕМП ДЛЯ АРХИВНЫХ МАТЧЕЙ
-            pace = calculate_pace_for_record(timestamp, points, total_match_time, total_value)
+            pace = calculate_pace_for_record(
+                timestamp, points, total_match_time, total_value)
             pace_data.append(pace)
 
         # Для архивных матчей добавляем финальную информацию
@@ -453,14 +457,172 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
+# В web_app.py добавляем
+active_match_monitors = {}
+
+
+async def get_match_page_data(match_id):
+    """Получение данных со страницы матча через Selenium Manager"""
+    try:
+        print(
+            f"🎯 [DEBUG] get_match_page_data ВЫЗВАНА для match_id: {match_id}")
+
+        # Получаем URL матча из БД
+        loop = asyncio.get_event_loop()
+        match_info = await loop.run_in_executor(
+            None,
+            lambda: db.conn.execute(
+                'SELECT match_url, teams FROM matches WHERE id = ?',
+                (match_id,)
+            ).fetchone()
+        )
+
+        if not match_info or not match_info[0]:
+            print(f"⚠️ [DEBUG] Матч {match_id} не найден или нет URL")
+            return None
+
+        match_url, teams = match_info
+        print(f"🔗 [DEBUG] Найден URL: {match_url} для команд: {teams}")
+
+        # Импортируем менеджер
+        try:
+            from selenium_manager import selenium_manager
+            print("✅ [DEBUG] Selenium Manager импортирован")
+        except ImportError as e:
+            print(f"❌ [DEBUG] Ошибка импорта: {e}")
+            return None
+
+        # Запускаем парсинг в отдельном потоке
+        print(f"🔄 [DEBUG] Запускаем парсинг для {match_url}")
+
+        match_data = await loop.run_in_executor(
+            None,
+            selenium_manager.parse_match_page,
+            match_url
+        )
+
+        if match_data:
+            print(f"✅ [DEBUG] Успешно получены данные: {match_data}")
+            match_data['source'] = 'real_match_page'
+        else:
+            print("⚠️ [DEBUG] parse_match_page вернул None")
+
+        return match_data
+
+    except Exception as e:
+        print(f"❌ [DEBUG] Критическая ошибка: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+
+async def broadcast_chart_update(match_id, updated_data):
+    """Отправка обновления графика конкретному клиенту"""
+    try:
+        if match_id in active_match_monitors:
+            # Обновляем статус в мониторе
+            active_match_monitors[match_id]['last_update'] = datetime.now()
+
+            for connection in active_match_monitors[match_id]['connections']:
+                try:
+                    await connection.send_json({
+                        "type": "chart_update",
+                        "match_id": match_id,
+                        "data": updated_data
+                    })
+                    logging.debug(
+                        f"📨 Отправлено обновление графика для матча {match_id}")
+                except Exception as e:
+                    logging.error(f"❌ Ошибка отправки обновления: {e}")
+                    # Удаляем нерабочее соединение
+                    active_match_monitors[match_id]['connections'].remove(
+                        connection)
+    except Exception as e:
+        logging.error(f"❌ Ошибка broadcast_chart_update: {e}")
+
+
+async def update_active_charts():
+    """Обновление данных для активных графиков"""
+    try:
+        if not active_match_monitors:
+            return
+
+        current_time = datetime.now()
+
+        for match_id, chart_data in list(active_match_monitors.items()):
+            # Проверяем когда было последнее обновление (не чаще чем раз в 2 секунды)
+            last_update = chart_data.get('last_update')
+            if last_update and (current_time - last_update).total_seconds() < 2:
+                continue
+
+            if chart_data['status'] == 'active':
+                # Получаем свежие данные со страницы матча
+                updated_data = await get_match_page_data(match_id)
+                if updated_data:
+                    await broadcast_chart_update(match_id, updated_data)
+
+    except Exception as e:
+        logging.error(f"❌ Ошибка update_active_charts: {e}")
+
+
+def add_active_chart(match_id, websocket):
+    """Добавление активного графика"""
+    if match_id not in active_match_monitors:
+        active_match_monitors[match_id] = {
+            'status': 'active',
+            'connections': [websocket]
+        }
+    else:
+        active_match_monitors[match_id]['connections'].append(websocket)
+
+
+def remove_active_chart(match_id, websocket):
+    """Удаление активного графика"""
+    if match_id in active_match_monitors:
+        active_match_monitors[match_id]['connections'].remove(websocket)
+        if not active_match_monitors[match_id]['connections']:
+            del active_match_monitors[match_id]
+
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
+
+    # Словарь для хранения открытых графиков этого соединения
+    client_charts = set()
+
     try:
         while True:
-            # Получаем данные матчей
+            # Ожидаем сообщения от клиента
+            try:
+                data = await asyncio.wait_for(websocket.receive_text(), timeout=1.0)
+                message = json.loads(data)
+
+                if message.get('type') == 'chart_opened':
+                    match_id = message['match_id']
+                    add_active_chart(match_id, websocket)
+                    client_charts.add(match_id)
+                    logging.info(f"📊 График открыт: матч {match_id}")
+
+                elif message.get('type') == 'chart_closed':
+                    match_id = message['match_id']
+                    remove_active_chart(match_id, websocket)
+                    client_charts.discard(match_id)
+                    logging.info(f"📊 График закрыт: матч {match_id}")
+
+            except asyncio.TimeoutError:
+                # Таймаут - нет сообщений от клиента, продолжаем
+                pass
+            except json.JSONDecodeError:
+                logging.error("❌ Невалидный JSON от клиента")
+            except Exception as e:
+                logging.error(f"❌ Ошибка обработки сообщения: {e}")
+
+            # Основные данные матчей (каждые 3 секунды)
             matches_data = await get_matches()
+
+            # Приоритетное обновление для активных графиков (каждые 2 секунды)
+            await update_active_charts()
 
             # Отправляем обновление таблицы
             await websocket.send_json({
@@ -468,19 +630,40 @@ async def websocket_endpoint(websocket: WebSocket):
                 "data": matches_data
             })
 
-            # Если есть активные графики, отправляем им обновления
-            for connection in manager.active_connections:
-                try:
-                    # Можно добавить логику для отправки конкретных данных графика
-                    # если клиент сообщит какой график у него открыт
-                    pass
-                except:
-                    manager.active_connections.remove(connection)
-
             await asyncio.sleep(3)
-    except WebSocketDisconnect:
-        manager.disconnect(websocket)
 
+    except WebSocketDisconnect:
+        # При отключении удаляем все графики этого клиента
+        for match_id in client_charts:
+            remove_active_chart(match_id, websocket)
+        manager.disconnect(websocket)
+        logging.info(
+            f"🔌 Клиент отключен, удалено графиков: {len(client_charts)}")
+
+
+@atexit.register
+def cleanup():
+    """Очистка ресурсов при завершении работы"""
+    from selenium_manager import selenium_manager
+    selenium_manager.close_driver()
+    logging.info("🧹 Ресурсы очищены")
+
+
+def keep_alive_worker():
+    """Фоновая задача для поддержания активности драйвера"""
+    while True:
+        try:
+            from selenium_manager import manager as selenium_manager
+            if selenium_manager._is_initialized:
+                selenium_manager._keep_alive()
+        except Exception as e:
+            logging.debug(f"Keep-alive worker error: {e}")
+        time.sleep(30)  # Каждые 30 секунд
+
+
+# Запускаем в отдельном потоке при старте
+keep_alive_thread = threading.Thread(target=keep_alive_worker, daemon=True)
+keep_alive_thread.start()
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

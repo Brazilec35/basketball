@@ -401,28 +401,52 @@
         let wsConnected = false;
         window.wsConnected = false;
         let currentOpenMatchId = null;
-
+        function sendWebSocketMessage(message) {
+            console.log('📤 Попытка отправить сообщение:', message);
+            if (window.wsConnected && window.ws) {
+                try {
+                    window.ws.send(JSON.stringify(message));
+                    console.log('✅ Сообщение отправлено успешно');
+                } catch (error) {
+                    console.error('❌ Ошибка отправки сообщения:', error);
+                }
+            } else {
+                console.warn('⚠️ WebSocket не подключен, сообщение не отправлено');
+            }
+        }
         // Обработчики для модального окна
         const modal = document.getElementById('chartModal');
         const closeBtn = document.querySelector('.close');
 
         closeBtn.onclick = function() {
+            if (currentOpenMatchId) {
+                sendWebSocketMessage({
+                    type: "chart_closed", 
+                    match_id: currentOpenMatchId
+                });
+                currentOpenMatchId = null;
+            }
             modal.style.display = 'none';
             if (currentChart) {
                 currentChart.destroy();
                 currentChart = null;
             }
-            currentOpenMatchId = null;
         }
 
         window.onclick = function(event) {
             if (event.target == modal) {
+                if (currentOpenMatchId) {
+                    sendWebSocketMessage({
+                        type: "chart_closed", 
+                        match_id: currentOpenMatchId
+                    });
+                    currentOpenMatchId = null;
+                }
                 modal.style.display = 'none';
                 if (currentChart) {
                     currentChart.destroy();
                     currentChart = null;
                 }
-                currentOpenMatchId = null;
             }
         }
 
@@ -538,6 +562,9 @@
             
             const socket = new WebSocket(wsUrl);
             
+            // ⚡ СОХРАНЯЕМ WebSocket объект в глобальную переменную
+            window.ws = socket;
+            
             socket.onopen = function() {
                 console.log('✅ WebSocket connected');
                 wsConnected = true;
@@ -548,12 +575,21 @@
             socket.onmessage = function(event) {
                 try {
                     const data = JSON.parse(event.data);
+                    
                     if (data.type === "table_update") {
                         updateTable(data.data.matches);
                         updateOpenChart(data.data.matches);
+                    } 
+                    else if (data.type === "chart_update") {
+                        // Обработка обновлений для активного графика
+                        if (currentOpenMatchId && data.match_id === currentOpenMatchId) {
+                            console.log('📥 Получено обновление графика:', data.data);
+                            // Здесь позже будем обновлять график
+                            showChartUpdateIndicator(data.data);
+                        }
                     }
                 } catch (error) {
-                    console.error('❌ Error parsing WebSocket message:', error);
+                    console.error('❌ Ошибка парсинга WebSocket сообщения:', error);
                 }
             };
 
@@ -561,6 +597,7 @@
                 console.log('❌ WebSocket disconnected');
                 wsConnected = false;
                 window.wsConnected = false;
+                window.ws = null; // ⚡ ОЧИЩАЕМ ПРИ ОТКЛЮЧЕНИИ
                 document.getElementById('stats').innerHTML = '🟡 Переподключение...';
                 setTimeout(connectWebSocket, 5000);
             };
@@ -568,6 +605,157 @@
             socket.onerror = function(error) {
                 console.error('❌ WebSocket error:', error);
             };
+        }
+        // Временная функция для показа обновлений
+        function showChartUpdateIndicator(data) {
+            console.log('🔄 Обновление графика получено:', data);
+            
+            if (!currentChart || !currentOpenMatchId) {
+                console.log('⚠️ График не открыт, игнорируем обновление');
+                return;
+            }
+            
+            try {
+                // 1. Обновляем заголовок с новыми данными
+                updateChartTitleWithLiveData(data);
+                
+                // 2. Добавляем новые точки в график
+                addDataToChart(data);
+                
+                // 3. Показываем визуальный индикатор обновления
+                showUpdateNotification(data);
+                
+            } catch (error) {
+                console.error('❌ Ошибка обновления графика:', error);
+            }
+        }
+        // 1. Обновляем заголовок
+        function updateChartTitleWithLiveData(data) {
+            const chartTitle = document.getElementById('chartTitle');
+            if (!chartTitle) return;
+            
+            const matchInfo = getMatchInfoByMatchId(currentOpenMatchId);
+            
+            chartTitle.innerHTML = `
+                <div style="text-align: center; padding: 5px 0;">
+                    <div style="font-size: 20px; font-weight: bold; color: #2c3e50; margin-bottom: 3px;">
+                        ${matchInfo.teams}
+                    </div>
+                    <div style="font-size: 14px; color: #5d6d7e; margin-bottom: 4px;">
+                        ${matchInfo.tournament} 
+                    </div>
+                    <div style="font-size: 16px; color: #7f8c8d; background: #f8f9fa; padding: 6px 12px; border-radius: 12px; margin-bottom: 3px;">
+                        ⏱️ ${data.current_time} | 📊 ${data.score}
+                    </div>
+                    <div style="font-size: 16px; color: #2c3e50; background: #e8f4fd; padding: 4px 10px; border-radius: 8px; margin-top: 2px;">
+                        🏀 Очки: <strong>${data.total_points}</strong> | 
+                        📈 Тотал: <strong>${data.total_value}</strong> |
+                        ⚡ Темп: <strong>${calculateLivePace(data)}</strong> |
+                        🔄 <span style="color: #00b894;">LIVE</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        // 2. Добавляем данные в график
+        function addDataToChart(data) {
+            if (!currentChart || !currentChart.data) return;
+            
+            const labels = currentChart.data.labels;
+            const totalPoints = currentChart.data.datasets[0].data;
+            const totalValues = currentChart.data.datasets[1].data;
+            const paceData = currentChart.data.datasets[2].data;
+            
+            // Добавляем новые данные
+            labels.push(data.current_time);
+            totalPoints.push(data.total_points);
+            totalValues.push(data.total_value);
+            
+            // Рассчитываем темп для новых данных
+            const livePace = calculateLivePace(data);
+            paceData.push(livePace);
+            
+            // Обновляем линии мин/макс тотала
+            updateMinMaxLines();
+            
+            // Ограничиваем количество точек (последние 50)
+            if (labels.length > 50) {
+                labels.shift();
+                totalPoints.shift();
+                totalValues.shift();
+                paceData.shift();
+            }
+            
+            // Обновляем график
+            currentChart.update('active');
+        }
+
+        // 3. Расчет темпа для live данных
+        function calculateLivePace(data) {
+            if (!data.current_time || data.current_time === '-' || data.total_points === 0) {
+                return '-';
+            }
+            
+            try {
+                const timeParts = data.current_time.split(':');
+                const minutes = parseInt(timeParts[0]) || 0;
+                const seconds = parseInt(timeParts[1]) || 0;
+                const totalMinutes = minutes + (seconds / 60);
+                
+                if (totalMinutes <= 0) return '-';
+                
+                // Предполагаем 40 минут матч (можно получить из данных)
+                const totalMatchTime = 40;
+                const pace = (data.total_points * totalMatchTime) / totalMinutes;
+                
+                return pace > 300 ? 300 : pace < 50 ? 50 : Math.round(pace * 10) / 10;
+            } catch (e) {
+                return '-';
+            }
+        }
+
+        // 4. Обновляем линии мин/макс тотала
+        function updateMinMaxLines() {
+            if (!currentChart || !currentChart.data.datasets[1].data) return;
+            
+            const totalValues = currentChart.data.datasets[1].data.filter(val => val !== null);
+            if (totalValues.length === 0) return;
+            
+            const maxTotal = Math.max(...totalValues);
+            const minTotal = Math.min(...totalValues);
+            
+            // Обновляем dataset[3] - макс тотал
+            if (currentChart.data.datasets[3]) {
+                currentChart.data.datasets[3].data = currentChart.data.labels.map(() => maxTotal);
+                currentChart.data.datasets[3].label = `Макс. тотал: ${maxTotal.toFixed(1)}`;
+            }
+            
+            // Обновляем dataset[4] - мин тотал
+            if (currentChart.data.datasets[4]) {
+                currentChart.data.datasets[4].data = currentChart.data.labels.map(() => minTotal);
+                currentChart.data.datasets[4].label = `Мин. тотал: ${minTotal.toFixed(1)}`;
+            }
+        }
+
+        // 5. Показываем уведомление об обновлении
+        function showUpdateNotification(data) {
+            // Используем существующий индикатор изменений
+            const changes = {
+                points: { value: data.total_points, diff: 1 },
+                pace: { value: calculateLivePace(data), diff: 0.5 },
+                total: { value: data.total_value, diff: 0.3 }
+            };
+            
+            updateChangeIndicator(changes);
+            
+            // Мигаем заголовком
+            const title = document.getElementById('chartTitle');
+            if (title) {
+                title.style.backgroundColor = '#e8f5e8';
+                setTimeout(() => {
+                    title.style.backgroundColor = '';
+                }, 1000);
+            }
         }
         function getTotalDiffClass(diff, percent) {
             if (!diff || diff === 0) return '';
@@ -754,8 +942,21 @@
         }
 
         function showMatchChart(matchId, teams) {
+            console.log('🎯 showMatchChart вызвана:', matchId, teams);
+            console.log('🔗 WebSocket статус:', window.wsConnected);
+            console.log('🔗 WebSocket объект:', window.ws);
+            
             currentOpenMatchId = matchId;
+            
+            // Сообщаем серверу об открытии графика
+            sendWebSocketMessage({
+                type: "chart_opened",
+                match_id: matchId
+            });
+            
+            // Получаем информацию о матче
             const matchInfo = getMatchInfoByMatchId(matchId);
+            console.log('📊 Информация о матче:', matchInfo);
             
             fetch(`/api/matches/${matchId}/chart`)
                 .then(response => response.json())
@@ -781,6 +982,7 @@
                     
                     createChart(data, teams, matchInfo.tournament, matchInfo.currentTime);
                     modal.style.display = 'block';
+                    console.log('✅ График открыт и отображен');
                 })
                 .catch(error => {
                     console.error('Ошибка загрузки графика:', error);

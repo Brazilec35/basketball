@@ -1,4 +1,3 @@
-# database.py
 import sqlite3
 import logging
 from datetime import datetime
@@ -31,7 +30,7 @@ class Database:
         self._init_db()
 
     def _init_db(self):
-        """Инициализация таблиц"""
+        """Инициализация таблиц с новыми полями"""
         self.conn.execute('''
             CREATE TABLE IF NOT EXISTS matches (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -40,11 +39,14 @@ class Database:
                 current_time TEXT,
                 total_match_time INTEGER DEFAULT 40,
                 status TEXT DEFAULT 'active',
+                match_url TEXT,
+                match_status TEXT DEFAULT 'active',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
 
+        # Таблица статистики матчей
         self.conn.execute('''
             CREATE TABLE IF NOT EXISTS match_stats (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -61,6 +63,37 @@ class Database:
                 FOREIGN KEY (match_id) REFERENCES matches (id),
                 UNIQUE(match_id, timestamp)
             )
+        ''')
+
+        # ДОБАВЛЯЕМ ТАБЛИЦУ ДЛЯ СИГНАЛОВ ЛОВЦА
+        # Таблица для сигналов ловца
+        self.conn.execute('''
+            CREATE TABLE IF NOT EXISTS hunter_signals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                match_id INTEGER,
+                teams TEXT,
+                tournament TEXT,
+                signal_strength TEXT,
+                deviation REAL,
+                total_change REAL,
+                minutes_elapsed REAL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (match_id) REFERENCES matches (id)
+            )
+        ''')
+
+        # ДОБАВЛЯЕМ ИНДЕКСЫ ДЛЯ ПРОИЗВОДИТЕЛЬНОСТИ
+        self.conn.execute('''
+            CREATE INDEX IF NOT EXISTS idx_match_stats_match_id 
+            ON match_stats(match_id)
+        ''')
+        self.conn.execute('''
+            CREATE INDEX IF NOT EXISTS idx_match_stats_recorded_at 
+            ON match_stats(recorded_at)
+        ''')
+        self.conn.execute('''
+            CREATE INDEX IF NOT EXISTS idx_hunter_signals_created 
+            ON hunter_signals(created_at)
         ''')
 
         self.conn.commit()
@@ -98,15 +131,12 @@ class Database:
         try:
             match_id, match_type = self.get_or_create_match(match_data)
 
-            # Логируем полученные данные
-            logging.info(
-                f"Сохранение матча {match_data['teams']}: score={match_data['score']}, total_points={match_data.get('total_points')}")
-
             # Обновляем статус матча на 'active' при каждом обновлении
-            self.conn.execute(
-                'UPDATE matches SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-                ('active', match_id)
-            )
+            self.conn.execute('''
+                UPDATE matches 
+                SET match_url = ?, match_status = ?, updated_at = CURRENT_TIMESTAMP 
+                WHERE id = ?
+            ''', (match_data.get('match_url'), match_data.get('match_status', 'active'), match_id))
 
             last_values = self._get_last_match_values(match_id)
             prepared_data = self._prepare_match_data(match_data, last_values)
@@ -123,7 +153,7 @@ class Database:
                     match_id,
                     current_timestamp,
                     prepared_data['score'],
-                    prepared_data['total_points'],  # Должно быть числом
+                    prepared_data['total_points'],
                     prepared_data['total_value'],
                     prepared_data['under_odds'],
                     prepared_data['over_odds'],
@@ -131,10 +161,6 @@ class Database:
                     prepared_data['p2_odds']
                 ))
                 self.conn.commit()
-
-                # Логируем сохраненные данные
-                logging.info(
-                    f"Сохранено: total_points={prepared_data['total_points']}")
 
                 return True, match_type, 'new_timestamp'
             else:
@@ -239,7 +265,7 @@ class Database:
                 ms.recorded_at
             FROM matches m
             JOIN match_stats ms ON m.id = ms.match_id
-            WHERE m.status = 'active'  -- ← ДОБАВЛЯЕМ ФИЛЬТР ПО СТАТУСУ
+            WHERE m.status = 'active'
             AND ms.recorded_at = (
                 SELECT MAX(recorded_at) 
                 FROM match_stats 
@@ -296,3 +322,41 @@ class Database:
         except Exception as e:
             logging.error(f"Ошибка получения начального тотала: {e}")
             return None
+
+    # НОВЫЕ МЕТОДЫ ДЛЯ ЛОВЦА
+    def save_hunter_signal(self, match_id, teams, tournament, signal_data):
+        """Сохранение сигнала ловца в БД"""
+        try:
+            self.conn.execute('''
+                INSERT INTO hunter_signals 
+                (match_id, teams, tournament, signal_strength, deviation, total_change, minutes_elapsed)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                match_id,
+                teams,
+                tournament,
+                signal_data.get('strength'),
+                signal_data.get('deviation'),
+                signal_data.get('total_change'),
+                signal_data.get('minutes_elapsed')
+            ))
+            self.conn.commit()
+            return True
+        except Exception as e:
+            logging.error(f"Ошибка сохранения сигнала ловца: {e}")
+            return False
+
+    def get_today_hunter_signals(self):
+        """Получить сигналы ловца за сегодня"""
+        try:
+            cursor = self.conn.execute('''
+                SELECT 
+                    teams, tournament, signal_strength, deviation, total_change, created_at
+                FROM hunter_signals 
+                WHERE DATE(created_at) = DATE('now')
+                ORDER BY created_at DESC
+            ''')
+            return cursor.fetchall()
+        except Exception as e:
+            logging.error(f"Ошибка получения сигналов ловца: {e}")
+            return []
