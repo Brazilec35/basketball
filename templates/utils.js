@@ -1,3 +1,4 @@
+<!-- utils.js-->
 // Глобальные переменные
 let currentChart = null;
 let wsConnected = false;
@@ -161,26 +162,4 @@ function showChangesIndicator(newData) {
     }
     
     previousChartData = JSON.parse(JSON.stringify(newData));
-}
-
-// Функции для ставок
-function getBetDisplay(betRecommendation) {
-    if (!betRecommendation) return '';
-    
-    if (betRecommendation.type === 'UNDER') {
-        const status = betRecommendation.status === 'confirmed' ? '✓' : '...';
-        return `ТМ ${status}`;
-    }
-    
-    return '';
-}
-
-function getBetClass(betRecommendation) {
-    if (!betRecommendation) return '';
-    
-    if (betRecommendation.type === 'UNDER') {
-        return betRecommendation.status === 'confirmed' ? 'bet-confirmed' : 'bet-pending';
-    }
-    
-    return '';
 }

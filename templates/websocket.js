@@ -1,3 +1,4 @@
+<!-- websocket.js-->
 // WebSocket соединение для live-обновлений
 function connectWebSocket() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';

@@ -1,3 +1,4 @@
+<!-- style.css-->
 * {
     margin: 0;
     padding: 0;
@@ -338,32 +339,4 @@ table tr:hover:not(.row-positive):not(.row-negative) {
     table { font-size: 12px; }
     th, td { padding: 8px 4px; }
     .nav-links { flex-direction: column; gap: 10px; }
-}
-
-/* Стили для ставок */
-.bet-confirmed {
-    background: rgba(231, 76, 60, 0.15) !important;
-    border-left: 4px solid #e74c3c;
-    font-weight: bold;
-    color: #c0392b;
-}
-
-.bet-pending {
-    background: rgba(243, 156, 18, 0.15) !important;
-    border-left: 4px solid #f39c12;
-    color: #e67e22;
-}
-
-.bet-column {
-    font-weight: 600;
-    text-align: center;
-    padding: 8px 4px;
-}
-
-.bet-under {
-    color: #e74c3c;
-    background: rgba(231, 76, 60, 0.1);
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 12px;
 }

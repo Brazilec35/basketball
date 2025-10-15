@@ -1,3 +1,4 @@
+<!-- app.js-->
 // Обработчики для модального окна
 const modal = document.getElementById('chartModal');
 const closeBtn = document.querySelector('.close');
@@ -22,6 +23,7 @@ window.onclick = function(event) {
     }
 }
 
+// Функция обновления таблицы матчей
 function updateTable(matches) {
     console.log('🔄 updateTable called with', matches?.length, 'matches');
     
@@ -53,7 +55,6 @@ function updateTable(matches) {
                     <th>Δ Тотала</th>
                     <th>Темп</th>
                     <th>Отклонение</th>
-                    <th>Ставка</th>
                 </tr>
             </thead>
             <tbody>
@@ -65,11 +66,9 @@ function updateTable(matches) {
         }
         
         const deviationClass = getDeviationClass(match.total_deviation);
-        const betDisplay = getBetDisplay(match.bet_recommendation);
-        const betClass = getBetClass(match.bet_recommendation);
         
         html += `
-            <tr class="${match.initial_total && match.total_value ? getTotalDiffClass(match.total_value - match.initial_total, ((match.total_value - match.initial_total) / match.initial_total * 100)) : ''} ${betClass}" onclick="showMatchChart(${match.id}, '${escapeHtml(match.teams)}')">
+            <tr class="${match.initial_total && match.total_value ? getTotalDiffClass(match.total_value - match.initial_total, ((match.total_value - match.initial_total) / match.initial_total * 100)) : ''}" onclick="showMatchChart(${match.id}, '${escapeHtml(match.teams)}')">
                 <td>
                     <div class="match-teams">${match.teams}</div>
                     <div class="tournament">${match.tournament}</div>
@@ -93,9 +92,6 @@ function updateTable(matches) {
                     <span class="${deviationClass}">
                         ${match.total_deviation ? `${match.total_deviation > 0 ? '+' : ''}${match.total_deviation}%` : '-'}
                     </span>
-                </td>
-                <td class="bet-column">
-                    ${betDisplay ? `<span class="bet-under">${betDisplay}</span>` : ''}
                 </td>
             </tr>
         `;
