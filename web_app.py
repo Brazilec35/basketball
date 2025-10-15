@@ -2,17 +2,21 @@
 """
 Веб-интерфейс на FastAPI
 """
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
-from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse
+import asyncio
 import json
 import logging
-import asyncio
 from datetime import datetime
-from database import Database, safe_int, safe_float
+
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+
+from database import Database, safe_float, safe_int
 
 app = FastAPI(title="Basketball Parser")
 templates = Jinja2Templates(directory="templates")
+app.mount("/static", StaticFiles(directory="templates"), name="static")
 db = Database()
 
 
