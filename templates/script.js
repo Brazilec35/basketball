@@ -6,7 +6,9 @@ window.wsConnected = false;
 let currentOpenMatchId = null;
 let previousChartData = null;
 let changeIndicatorTimeout = null;
-
+const BET_CONFIG = {
+    WARNING_PERCENT: 10
+};
 // Обработчики для модального окна
 const modal = document.getElementById('chartModal');
 const closeBtn = document.querySelector('.close');
@@ -54,8 +56,8 @@ function getDeviationClass(deviation) {
 
 function getTotalDiffClass(diff, percent) {
     if (!diff || diff === 0) return '';
-    if (percent < -10) return 'row-negative';
-    if (percent > 10) return 'row-positive';
+    if (percent < -BET_CONFIG.WARNING_PERCENT) return 'row-negative';
+    if (percent > BET_CONFIG.WARNING_PERCENT) return 'row-positive';
     return '';
 }
 

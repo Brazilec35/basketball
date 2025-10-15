@@ -93,3 +93,9 @@ PRODUCTION_CONFIG = {
     'HEADLESS': True,
     'DATABASE_PATH': '/app/data/basketball.db'
 }
+
+BET_CONFIG = {
+    'TRIGGER_PERCENT': 15,      # для срабатывания ставки
+    'WARNING_PERCENT': 10,      # для подсветки в таблице
+    'MIN_MATCH_TIME': 5,        # минимальное время матча (минуты)
+}

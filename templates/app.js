@@ -2,6 +2,9 @@
 // Обработчики для модального окна
 const modal = document.getElementById('chartModal');
 const closeBtn = document.querySelector('.close');
+const BET_CONFIG = {
+    WARNING_PERCENT: 10
+};
 
 closeBtn.onclick = function() {
     modal.style.display = 'none';
@@ -55,6 +58,7 @@ function updateTable(matches) {
                     <th>Δ Тотала</th>
                     <th>Темп</th>
                     <th>Отклонение</th>
+                    <th>Ставка</th>
                 </tr>
             </thead>
             <tbody>
@@ -92,6 +96,13 @@ function updateTable(matches) {
                     <span class="${deviationClass}">
                         ${match.total_deviation ? `${match.total_deviation > 0 ? '+' : ''}${match.total_deviation}%` : '-'}
                     </span>
+                </td>
+                <td>
+                    ${match.bet ? 
+                        `🍀ТМ ${match.bet.total_value} (${match.bet.diff_percent.toFixed(1)}%)<br>
+                        <small>${match.bet.triggered_at}</small>` 
+                        : '-'
+                    }
                 </td>
             </tr>
         `;

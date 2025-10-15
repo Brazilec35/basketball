@@ -102,7 +102,13 @@ async def get_matches():
                 'total_points': safe_int(match[6]),
                 'total_value': safe_float(match[7])
             }
-
+            # triggered_at exists (9-й элемент в результате SELECT)
+            if match[9]:
+                match_data['bet'] = {
+                    'triggered_at': match[9],
+                    'total_value': safe_float(match[10]),
+                    'diff_percent': safe_float(match[11])
+                }
             # Получаем начальный тотал
             initial_total = await loop.run_in_executor(
                 None, db.get_initial_total, match_data['id']
@@ -156,7 +162,14 @@ async def get_match_chart(match_id: int):
 
         if not history:
             return {"error": "Данные матча не найдены"}
-
+        # Получаем данные о ставке для этого матча
+        bet_data = await loop.run_in_executor(
+            None,
+            lambda: db.conn.execute(
+                'SELECT triggered_at FROM match_bets WHERE match_id = ?',
+                (match_id,)
+            ).fetchone()
+        )
         # Получаем общее время матча
         match_info = await loop.run_in_executor(
             None,
@@ -187,7 +200,8 @@ async def get_match_chart(match_id: int):
             total_values.append(total_value)
 
             # ВЫЧИСЛЯЕМ ТЕМП ДЛЯ АРХИВНЫХ МАТЧЕЙ
-            pace = calculate_pace_for_record(timestamp, points, total_match_time, total_value)
+            pace = calculate_pace_for_record(
+                timestamp, points, total_match_time, total_value)
             pace_data.append(pace)
 
         # Для архивных матчей добавляем финальную информацию
@@ -198,7 +212,7 @@ async def get_match_chart(match_id: int):
             if final_total > 0:
                 final_result = 'OVER' if final_points > final_total else 'UNDER'
 
-        return {
+        chart_response = {
             "timestamps": timestamps,
             "scores": scores,
             "total_points": total_points,
@@ -208,6 +222,12 @@ async def get_match_chart(match_id: int):
             "final_result": final_result,
             "match_status": match_status
         }
+
+        # Если есть ставка - добавляем её время
+        if bet_data:
+            chart_response["bet_timestamp"] = bet_data[0]
+
+        return chart_response
 
     except Exception as e:
         logging.error(f"Ошибка получения данных графика: {e}")

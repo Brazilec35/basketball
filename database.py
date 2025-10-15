@@ -2,7 +2,7 @@
 import sqlite3
 import logging
 from datetime import datetime
-
+from config import BET_CONFIG
 
 def safe_int(value, default=0):
     """Безопасное преобразование в int"""
@@ -63,6 +63,18 @@ class Database:
             )
         ''')
 
+        self.conn.execute('''
+            CREATE TABLE IF NOT EXISTS match_bets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                match_id INTEGER NOT NULL,
+                triggered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                total_value REAL NOT NULL,
+                diff_percent REAL NOT NULL,
+                initial_total REAL NOT NULL,
+                FOREIGN KEY (match_id) REFERENCES matches (id),
+                UNIQUE(match_id)
+            )
+        ''')
         self.conn.commit()
 
     def get_or_create_match(self, match_data):
@@ -131,7 +143,7 @@ class Database:
                     prepared_data['p2_odds']
                 ))
                 self.conn.commit()
-
+                self._check_bet_condition(match_id, match_data, prepared_data)
                 # Логируем сохраненные данные
                 logging.info(
                     f"Сохранено: total_points={prepared_data['total_points']}")
@@ -236,10 +248,14 @@ class Database:
                 ms.score,
                 ms.total_points,
                 ms.total_value,
-                ms.recorded_at
+                ms.recorded_at,
+                mb.triggered_at,
+                mb.total_value as bet_total,
+                mb.diff_percent as bet_diff
             FROM matches m
             JOIN match_stats ms ON m.id = ms.match_id
-            WHERE m.status = 'active'  -- ← ДОБАВЛЯЕМ ФИЛЬТР ПО СТАТУСУ
+            LEFT JOIN match_bets mb ON m.id = mb.match_id
+            WHERE m.status = 'active'
             AND ms.recorded_at = (
                 SELECT MAX(recorded_at) 
                 FROM match_stats 
@@ -296,3 +312,32 @@ class Database:
         except Exception as e:
             logging.error(f"Ошибка получения начального тотала: {e}")
             return None
+
+    def _check_bet_condition(self, match_id, match_data, prepared_data):
+        try:
+            # Проверяем что нет существующей ставки
+            cursor = self.conn.execute(
+                'SELECT 1 FROM match_bets WHERE match_id = ?', 
+                (match_id,)
+            )
+            if cursor.fetchone():
+                return  # ставка уже существует
+            
+            # Проверяем условие >12%
+            current_total = prepared_data.get('total_value')
+            initial_total = self.get_initial_total(match_id)
+            
+            if current_total and initial_total and initial_total > 0:
+                diff_percent = ((current_total - initial_total) / initial_total) * 100
+                
+                if diff_percent > BET_CONFIG['TRIGGER_PERCENT']:  # условие срабатывания
+                    self.conn.execute('''
+                        INSERT INTO match_bets 
+                        (match_id, triggered_at, total_value, diff_percent, initial_total)
+                        VALUES (?, ?, ?, ?, ?)
+                    ''', (match_id, match_data['time'], current_total, diff_percent, initial_total))
+                    self.conn.commit()
+                    logging.info(f"🎯 Ставка зафиксирована для матча {match_id}: {diff_percent:.1f}%")
+                    
+        except Exception as e:
+            logging.error(f"Ошибка проверки условия ставки: {e}")
