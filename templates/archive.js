@@ -1,6 +1,4 @@
 // archive.js
-let currentChart = null;
-let currentOpenMatchId = null;
 
 // Обработчики для модального окна
 const modal = document.getElementById('chartModal');
@@ -100,9 +98,9 @@ function updateArchiveTable(matches) {
         const initialFinalDiffPercent = initialFinalDiff && match.initial_total ? 
             (initialFinalDiff / match.initial_total) * 100 : null;
         
-        // Класс для отличия
-        const diffClass = initialFinalDiffPercent > 12 ? 'negative' : 
-                         initialFinalDiffPercent > 0 ? 'positive' : 'neutral';
+        // Класс для отличия начального тотала от финального счета
+        const diffClass = initialFinalDiffPercent >= 5 ? 'positive' : 
+                        initialFinalDiffPercent <= -5 ? 'negative' : 'neutral';
 
         // Информация о нашей ставке
         const betInfo = match.bet_total ? 
@@ -220,7 +218,6 @@ function updateArchiveStats(stats) {
     document.getElementById('avgDeviation').textContent = stats.avg_deviation ? stats.avg_deviation + '%' : '-';
 }
 
-// Функция показа графика для архивного матча
 function showArchiveChart(matchId, teams) {
     console.log('📊 Opening archive chart for match:', matchId);
     
@@ -248,7 +245,8 @@ function showArchiveChart(matchId, teams) {
                 </div>
             `;
             
-            createArchiveChart(data, teams);
+            // ИСПОЛЬЗУЕМ СУЩЕСТВУЮЩУЮ ФУНКЦИЮ ИЗ chart.js
+            createChart(data, teams, 'Архивный матч', '');
             modal.style.display = 'block';
         })
         .catch(error => {
@@ -257,125 +255,6 @@ function showArchiveChart(matchId, teams) {
         });
 }
 
-// Функция создания графика для архивного матча
-function createArchiveChart(chartData, teams) {
-    const ctx = document.getElementById('matchChart').getContext('2d');
-    
-    if (currentChart) {
-        currentChart.destroy();
-    }
-    
-    const currentValues = getCurrentValues(chartData);
-    
-    currentChart = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: chartData.timestamps,
-            datasets: [
-                {
-                    label: `Очки (тотал матча): ${currentValues.totalPoints}`,
-                    data: chartData.total_points,
-                    borderColor: 'rgb(75, 192, 192)',
-                    backgroundColor: 'rgba(75, 192, 192, 0.1)',
-                    borderWidth: 2,
-                    tension: 0.1,
-                    fill: false,
-                    yAxisID: 'y'
-                },
-                {
-                    label: `Линия тотала: ${currentValues.totalValue}`,
-                    data: chartData.total_values,
-                    borderColor: 'rgb(255, 99, 132)',
-                    backgroundColor: 'rgba(255, 99, 132, 0.1)',
-                    borderWidth: 2,
-                    borderDash: [5, 5],
-                    tension: 0.1,
-                    fill: false,
-                    yAxisID: 'y'
-                },
-                {
-                    label: `Темп игры: ${currentValues.pace}`,
-                    data: chartData.pace_data,
-                    borderColor: 'rgb(153, 102, 255)',
-                    backgroundColor: 'rgba(153, 102, 255, 0.1)',
-                    borderWidth: 2,
-                    tension: 0.1,
-                    pointStyle: 'circle',
-                    pointRadius: 3,
-                    pointBackgroundColor: 'rgb(153, 102, 255)',
-                    fill: false,
-                    yAxisID: 'y'
-                }
-            ]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: {
-                mode: 'index',
-                intersect: false
-            },
-            scales: {
-                x: {
-                    title: {
-                        display: true,
-                        text: 'Время матча'
-                    },
-                    grid: {
-                        color: 'rgba(0, 0, 0, 0.1)'
-                    }
-                },
-                y: {
-                    type: 'linear',
-                    display: true,
-                    position: 'left',
-                    title: {
-                        display: true,
-                        text: 'Очки / Темп'
-                    },
-                    grid: {
-                        color: 'rgba(0, 0, 0, 0.1)'
-                    }
-                }
-            },
-            plugins: {
-                tooltip: {
-                    callbacks: {
-                        title: function(context) {
-                            const index = context[0].dataIndex;
-                            const timestamp = chartData.timestamps[index];
-                            const score = chartData.scores ? chartData.scores[index] : 'N/A';
-                            return `Время: ${timestamp} | Счет: ${score}`;
-                        },
-                        label: function(context) {
-                            let label = context.dataset.label.split(':')[0] || '';
-                            if (label) {
-                                label += ': ';
-                            }
-                            if (label.includes('Темп игры')) {
-                                label += context.parsed.y + ' очков/игра';
-                            } else {
-                                label += context.parsed.y;
-                            }
-                            return label;
-                        }
-                    }
-                },
-                legend: {
-                    display: true,
-                    position: 'top',
-                    labels: {
-                        usePointStyle: true,
-                        padding: 20,
-                        font: {
-                            size: 12
-                        }
-                    }
-                }
-            }
-        }
-    });
-}
 
 // Функция получения текущих значений для легенды
 function getCurrentValues(chartData) {
