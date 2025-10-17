@@ -505,6 +505,95 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         manager.disconnect(websocket)
 
+
+@app.get("/api/analytics/stats")
+async def get_analytics_stats():
+    """Общая статистика ставок"""
+    try:
+        loop = asyncio.get_event_loop()
+        stats = await loop.run_in_executor(None, lambda: db.conn.execute('''
+            SELECT 
+                COUNT(*) as total_bets,
+                SUM(CASE WHEN bet_result = 'WIN' THEN 1 ELSE 0 END) as wins,
+                SUM(CASE WHEN bet_result = 'LOSE' THEN 1 ELSE 0 END) as losses,
+                AVG(total_diff_percent) as avg_total_diff
+            FROM bet_analysis
+        ''').fetchone())
+
+        total_bets, wins, losses, avg_total_diff = stats
+
+        return {
+            "total_bets": total_bets,
+            "wins": wins,
+            "losses": losses,
+            "win_rate": round(wins / total_bets * 100, 1) if total_bets > 0 else 0,
+            "avg_total_diff": round(avg_total_diff, 1) if avg_total_diff else 0
+        } 
+
+    except Exception as e:
+        logging.error(f"Ошибка получения статистики: {e}")
+        return {"error": "Ошибка загрузки статистики"}
+
+
+@app.get("/api/analytics/history")
+async def get_analytics_history(limit: int = 50):
+    """История всех ставок с результатами"""
+    try:
+        loop = asyncio.get_event_loop()
+        history = await loop.run_in_executor(None, lambda: db.conn.execute('''
+            SELECT 
+                m.teams,
+                m.tournament,
+                ba.final_score,
+                ba.final_points,
+                mb.total_value as bet_total,
+                ba.bet_result,
+                ba.total_diff,
+                ba.total_diff_percent,
+                ba.analyzed_at
+            FROM bet_analysis ba
+            JOIN matches m ON ba.match_id = m.id
+            JOIN match_bets mb ON ba.bet_id = mb.id
+            ORDER BY ba.analyzed_at DESC
+            LIMIT ?
+        ''', (limit,)).fetchall())
+        
+        formatted_history = []
+        for row in history:
+            formatted_history.append({
+                'teams': row[0],
+                'tournament': row[1],
+                'final_score': row[2],
+                'final_points': row[3],
+                'bet_total': row[4],
+                'bet_result': row[5],
+                'total_diff': round(row[6], 1) if row[6] else 0,
+                'total_diff_percent': round(row[7], 1) if row[7] else 0,
+                'analyzed_at': row[8]
+            })
+            
+        return {"history": formatted_history}
+        
+    except Exception as e:
+        logging.error(f"Ошибка получения истории: {e}")
+        return {"history": []}
+
+
+@app.get("/analytics", response_class=HTMLResponse)
+async def analytics_page(request: Request):
+    return templates.TemplateResponse("analytics.html", {"request": request})
+
+@app.post("/api/analytics/rescan")
+async def rescan_completed_matches():
+    """Принудительная проверка всех завершенных матчей со ставками"""
+    try:
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, db.rescan_completed_matches)
+        return result
+    except Exception as e:
+        logging.error(f"Ошибка перепроверки матчей: {e}")
+        return {"error": "Ошибка перепроверки"}
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

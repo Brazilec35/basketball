@@ -4,6 +4,7 @@ import logging
 from datetime import datetime
 from config import BET_CONFIG
 
+
 def safe_int(value, default=0):
     """Безопасное преобразование в int"""
     try:
@@ -27,7 +28,7 @@ def safe_float(value, default=None):
 class Database:
     def __init__(self, db_path='basketball.db'):
         self.db_path = db_path
-        self.conn = sqlite3.connect(db_path, check_same_thread=False)
+        self.conn = sqlite3.connect(db_path, check_same_thread=False, timeout=20.0)
         self._init_db()
 
     def _init_db(self):
@@ -60,6 +61,23 @@ class Database:
                 recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (match_id) REFERENCES matches (id),
                 UNIQUE(match_id, timestamp)
+            )
+        ''')
+
+        self.conn.execute('''
+            CREATE TABLE IF NOT EXISTS bet_analysis (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                match_id INTEGER NOT NULL,
+                bet_id INTEGER NOT NULL,
+                final_score TEXT,
+                final_points INTEGER,
+                bet_result TEXT,
+                total_diff REAL,
+                total_diff_percent REAL,
+                analyzed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (match_id) REFERENCES matches (id),
+                FOREIGN KEY (bet_id) REFERENCES match_bets (id),
+                UNIQUE(match_id, bet_id)
             )
         ''')
 
@@ -268,10 +286,9 @@ class Database:
         return cursor.fetchall()
 
     def sync_match_statuses(self, current_matches_teams):
-        """Синхронизация статусов матчей с текущими данными парсера"""
         try:
             cursor = self.conn.execute('''
-                SELECT id, teams, status 
+                SELECT id, teams, status, current_time, total_match_time 
                 FROM matches 
                 WHERE updated_at > datetime('now', '-4 hours')
                 AND status != 'finished'
@@ -279,18 +296,31 @@ class Database:
 
             all_recent_matches = cursor.fetchall()
             updated_count = 0
+            analyzed_count = 0
 
-            for match_id, teams, current_status in all_recent_matches:
+            for match_id, teams, current_status, current_time, total_match_time in all_recent_matches:
                 if teams not in current_matches_teams:
+                    # Помечаем матч как завершенный
                     self.conn.execute(
                         'UPDATE matches SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
                         ('finished', match_id)
                     )
                     updated_count += 1
-                    logging.info(f"Матч завершен: {teams}")
+                    logging.info(f"Матч завершен: {teams} (время: {current_time}, полное: {total_match_time})")
+                    
+                    # ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ
+                    is_completed = self._is_match_fully_completed(current_time, total_match_time)
+                    logging.info(f"Проверка завершения: время={current_time}, полное={total_match_time}, результат={is_completed}")
+                    
+                    if is_completed:
+                        match_data = self._get_last_match_data(match_id)
+                        logging.info(f"Данные для анализа: {match_data}")
+                        self.analyze_completed_match(match_id, match_data)
+                        analyzed_count += 1
 
             self.conn.commit()
-            logging.info(f"Синхронизировано статусов: {updated_count} матчей")
+            logging.info(
+                f"Синхронизировано статусов: {updated_count} матчей, проанализировано: {analyzed_count}")
 
         except Exception as e:
             logging.error(f"Ошибка синхронизации статусов: {e}")
@@ -317,27 +347,157 @@ class Database:
         try:
             # Проверяем что нет существующей ставки
             cursor = self.conn.execute(
-                'SELECT 1 FROM match_bets WHERE match_id = ?', 
+                'SELECT 1 FROM match_bets WHERE match_id = ?',
                 (match_id,)
             )
             if cursor.fetchone():
                 return  # ставка уже существует
-            
+
             # Проверяем условие >12%
             current_total = prepared_data.get('total_value')
             initial_total = self.get_initial_total(match_id)
-            
+
             if current_total and initial_total and initial_total > 0:
-                diff_percent = ((current_total - initial_total) / initial_total) * 100
-                
-                if diff_percent > BET_CONFIG['TRIGGER_PERCENT']:  # условие срабатывания
+                diff_percent = (
+                    (current_total - initial_total) / initial_total) * 100
+
+                # условие срабатывания
+                if diff_percent > BET_CONFIG['TRIGGER_PERCENT']:
                     self.conn.execute('''
                         INSERT INTO match_bets 
                         (match_id, triggered_at, total_value, diff_percent, initial_total)
                         VALUES (?, ?, ?, ?, ?)
                     ''', (match_id, match_data['time'], current_total, diff_percent, initial_total))
                     self.conn.commit()
-                    logging.info(f"🎯 Ставка зафиксирована для матча {match_id}: {diff_percent:.1f}%")
-                    
+                    logging.info(
+                        f"🎯 Ставка зафиксирована для матча {match_id}: {diff_percent:.1f}%")
+
         except Exception as e:
             logging.error(f"Ошибка проверки условия ставки: {e}")
+
+    def analyze_completed_match(self, match_id, match_data):
+        try:
+            # 1. Проверяем есть ли ставка для этого матча
+            bet_cursor = self.conn.execute(
+                'SELECT id, total_value FROM match_bets WHERE match_id = ?',
+                (match_id,)
+            )
+            bet = bet_cursor.fetchone()
+            if not bet:
+                return  # нет ставки - нечего анализировать
+            
+            bet_id, bet_total = bet
+            
+            # 2. Проверяем не анализировали ли уже этот матч
+            analysis_cursor = self.conn.execute(
+                'SELECT 1 FROM bet_analysis WHERE match_id = ?',
+                (match_id,)
+            )
+            if analysis_cursor.fetchone():
+                return  # уже анализировали
+            
+            # 3. Получаем финальные данные матча
+            final_points = match_data.get('total_points', 0)
+            final_score = match_data.get('score', '-')
+            
+            # 4. ИСПРАВЛЕННАЯ ЛОГИКА - ставка на ТМ
+            if final_points < bet_total:
+                bet_result = 'WIN'    # ТМ сыграл - ВЫИГРЫШ
+            elif final_points > bet_total:
+                bet_result = 'LOSE'   # ТМ не сыграл - ПРОИГРЫШ
+            else:
+                bet_result = 'PUSH'   # Возврат
+            
+            # 5. Рассчитываем отклонение
+            initial_total = self.get_initial_total(match_id)
+            total_diff = bet_total - initial_total if initial_total else 0
+            total_diff_percent = ((bet_total - initial_total) / initial_total * 100) if initial_total else 0
+            
+            # 6. Сохраняем анализ
+            self.conn.execute('''
+                INSERT INTO bet_analysis 
+                (match_id, bet_id, final_score, final_points, bet_result, total_diff, total_diff_percent)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (match_id, bet_id, final_score, final_points, bet_result, total_diff, total_diff_percent))
+            
+            self.conn.commit()
+            
+        except Exception as e:
+            logging.error(f"Ошибка анализа матча {match_id}: {e}")
+
+    def _get_last_match_data(self, match_id):
+        """Получение последних данных матча"""
+        cursor = self.conn.execute('''
+            SELECT score, total_points, total_value 
+            FROM match_stats 
+            WHERE match_id = ? 
+            ORDER BY recorded_at DESC 
+            LIMIT 1
+        ''', (match_id,))
+        result = cursor.fetchone()
+        if result:
+            return {
+                'score': result[0],
+                'total_points': result[1],
+                'total_value': result[2]
+            }
+        return None
+
+    def _is_match_fully_completed(self, current_time, total_match_time):
+        """Проверка что матч полноценно завершен"""
+        try:
+            if not current_time or current_time == '-':
+                return False
+
+            # Парсим время матча (формат "45:30" или "40:00")
+            parts = current_time.split(':')
+            minutes = int(parts[0]) if parts[0].isdigit() else 0
+
+            # Проверяем пороги завершения
+            if total_match_time == 40:
+                return minutes >= 39
+            elif total_match_time == 48:
+                return minutes >= 47
+            else:
+                return minutes >= total_match_time - 1  # для других форматов
+
+        except Exception as e:
+            logging.error(f"Ошибка проверки завершения матча: {e}")
+            return False
+
+    def rescan_completed_matches(self):
+        """Перепроверка всех завершенных матчей со ставками"""
+        try:
+            # Ищем матчи: finished + есть ставка + нет анализа
+            cursor = self.conn.execute('''
+                SELECT m.id, m.teams, m.current_time, m.total_match_time
+                FROM matches m
+                JOIN match_bets mb ON m.id = mb.match_id
+                LEFT JOIN bet_analysis ba ON m.id = ba.match_id
+                WHERE m.status = 'finished'
+                AND ba.id IS NULL  -- нет анализа
+            ''')
+            
+            matches_to_analyze = cursor.fetchall()
+            analyzed_count = 0
+            
+            logging.info(f"🔍 Найдено матчей для перепроверки: {len(matches_to_analyze)}")
+            
+            for match_id, teams, current_time, total_match_time in matches_to_analyze:
+                # Используем улучшенную проверку завершения
+                if self._is_match_fully_completed(current_time, total_match_time):
+                    match_data = self._get_last_match_data(match_id)
+                    if match_data:
+                        self.analyze_completed_match(match_id, match_data)
+                        analyzed_count += 1
+                        logging.info(f"✅ Проанализирован: {teams}")
+            
+            return {
+                "scanned_matches": len(matches_to_analyze),
+                "analyzed_matches": analyzed_count,
+                "message": f"Проанализировано {analyzed_count} из {len(matches_to_analyze)} матчей"
+            }
+            
+        except Exception as e:
+            logging.error(f"Ошибка перепроверки: {e}")
+            return {"error": str(e)}
