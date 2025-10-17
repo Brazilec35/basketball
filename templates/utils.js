@@ -1,25 +1,11 @@
 <!-- utils.js-->
 // Глобальные переменные
-let currentChart = null;
-let wsConnected = false;
-window.wsConnected = false;
-let currentOpenMatchId = null;
-let previousChartData = null;
-let changeIndicatorTimeout = null;
+var currentChart = null;
+var wsConnected = false;
+var currentOpenMatchId = null;
+var previousChartData = null;
+var changeIndicatorTimeout = null;
 
-// Функция расчета минут матча из времени
-function calculateMinutesElapsed(currentTime) {
-    if (!currentTime || currentTime === '-') return 0;
-    try {
-        const parts = currentTime.split(':');
-        if (parts.length < 2) return 0;
-        const minutes = parseInt(parts[0]) || 0;
-        const seconds = parseInt(parts[1]) || 0;
-        return minutes + (seconds / 60);
-    } catch (error) {
-        return 0;
-    }
-}
 
 // Функции для цветовых классов
 function getDeviationClass(deviation) {

@@ -1,11 +1,10 @@
-<!-- style.css-->
+/* Основные стили из архива + дополнительные */
 * {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
 }
 
-/* Основные стили страницы */
 body { 
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
     margin: 0; 
@@ -42,7 +41,6 @@ body {
 .nav-links {
     display: flex;
     gap: 20px;
-    margin-right: 20px;
 }
 
 .nav-links a {
@@ -63,15 +61,7 @@ body {
     color: white;
 }
 
-.stats { 
-    background: linear-gradient(135deg, #74b9ff, #0984e3);
-    color: white;
-    padding: 12px 20px;
-    border-radius: 10px;
-    font-weight: 600;
-    box-shadow: 0 4px 15px rgba(116, 185, 255, 0.3);
-}
-
+/* Общие стили таблиц */
 table { 
     width: 100%; 
     border-collapse: collapse;
@@ -81,17 +71,11 @@ table {
     box-shadow: 0 5px 15px rgba(0,0,0,0.1);
 }
 
-small {
-    font-size: 12px;
-    opacity: 0.9;
-    font-weight: 600;
-}
-
 th, td { 
     padding: 14px 12px; 
     text-align: left; 
     border-bottom: 1px solid #e9ecef;
-    font-size: 16px;
+    font-size: 14px;
 }
 
 th { 
@@ -99,7 +83,7 @@ th {
     color: white;
     font-weight: 600;
     text-transform: uppercase;
-    font-size: 14px;
+    font-size: 12px;
     letter-spacing: 0.5px;
 }
 
@@ -110,7 +94,7 @@ tr:hover {
     cursor: pointer;
 }
 
-/* Цветовые классы для отклонений */
+/* Цветовые классы */
 .positive { 
     color: #00b894; 
     font-weight: bold;
@@ -134,25 +118,35 @@ tr:hover {
     border-radius: 4px;
 }
 
-.loading { 
-    text-align: center; 
-    padding: 40px; 
-    color: #6c757d;
-    font-size: 18px;
+/* Стили для карточек статистики */
+.stats-cards, .archive-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+    margin-bottom: 20px;
 }
 
-.match-teams {
-    font-weight: 600;
-    color: #2d3436;
-    font-size: 14px;
+.stat-card {
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+    text-align: center;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.1);
 }
 
-.tournament {
-    color: #636e72;
-    font-size: 12px;
+.stat-value {
+    font-size: 2em;
+    font-weight: bold;
+    color: #2c3e50;
+    margin-bottom: 5px;
 }
 
-/* Стили для модального окна с графиком */
+.stat-label {
+    color: #7f8c8d;
+    font-size: 0.9em;
+}
+
+/* Стили для модального окна */
 .modal {
     display: none;
     position: fixed;
@@ -187,7 +181,6 @@ tr:hover {
     color: black;
 }
 
-/* Контейнер для графика */
 .chart-container {
     position: relative;
     height: 525px;
@@ -202,182 +195,137 @@ tr:hover {
     font-weight: bold;
 }
 
-/* Стили для всплывающего табло изменений */
-.change-indicator {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%) scale(0.8);
-    background: rgba(255, 255, 255, 0.95);
-    border: 2px solid #667eea;
-    border-radius: 15px;
-    padding: 15px;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-    z-index: 10000;
-    opacity: 0;
-    transition: all 0.3s ease;
-    pointer-events: none;
-    min-width: 200px;
+/* Дополнительные стили */
+.loading { 
+    text-align: center; 
+    padding: 40px; 
+    color: #6c757d;
+    font-size: 18px;
 }
 
-.change-indicator.show {
-    opacity: 1;
-    transform: translate(-50%, -50%) scale(1);
-}
-
-.change-content {
-    text-align: center;
-}
-
-.change-header {
-    font-weight: bold;
-    color: #2c3e50;
-    margin-bottom: 10px;
-    font-size: 16px;
-    border-bottom: 1px solid #eee;
-    padding-bottom: 5px;
-}
-
-.change-stats {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.change-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 5px 0;
-}
-
-.change-label {
+.match-teams {
     font-weight: 600;
-    color: #5d6d7e;
+    color: #2d3436;
     font-size: 14px;
 }
 
-.change-value {
-    font-weight: bold;
-    color: #2c3e50;
-    font-size: 14px;
-}
-
-.change-diff {
-    font-weight: bold;
-    font-size: 12px;
-    padding: 2px 6px;
-    border-radius: 10px;
-    min-width: 40px;
-    text-align: center;
-}
-
-.change-diff.positive {
-    background: rgba(0, 184, 148, 0.2);
-    color: #00b894;
-}
-
-.change-diff.negative {
-    background: rgba(225, 112, 85, 0.2);
-    color: #e17055;
-}
-
-.change-diff.neutral {
-    background: rgba(99, 110, 114, 0.2);
+.tournament {
     color: #636e72;
+    font-size: 12px;
 }
 
-/* Стили для подсветки всей строки */
-.row-positive { 
-    background: rgba(0, 184, 148, 0.15) !important; 
-    border-left: 4px solid #00b894;
+.score-main, .bet-main, .comparison-main {
+    font-weight: 600;
+    font-size: 14px;
+    color: #2c3e50;
+    margin-bottom: 2px;
 }
 
-.row-negative { 
-    background: rgba(225, 112, 85, 0.15) !important; 
-    border-left: 4px solid #e17055;
+.score-details, .bet-details, .comparison-details {
+    font-size: 12px;
+    color: #7f8c8d;
 }
 
-table tr.row-positive:hover {
-    background: rgba(0, 184, 148, 0.25) !important;
-    transform: none !important;
+.bet-time {
+    font-size: 12px;
+    color: #7f8c8d;
+    margin-top: 3px;
 }
 
-table tr.row-negative:hover {
-    background: rgba(225, 112, 85, 0.25) !important;
-    transform: none !important;
+.control-panel {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 10px;
+    margin-bottom: 20px;
 }
 
-table tr:hover:not(.row-positive):not(.row-negative) {
-    background-color: #f8f9fa;
+.btn {
+    background: #667eea;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.btn:hover {
+    background: #5a6fd8;
     transform: translateY(-1px);
 }
 
-/* Адаптивность */
-@media (max-width: 1200px) {
-    .container {
-        margin: 10px;
-        padding: 15px;
-    }
-    
-    table {
-        font-size: 12px;
-    }
-    
-    th, td {
-        padding: 10px 8px;
-    }
-    
-    .modal-content {
-        width: 95%;
-        margin: 2% auto;
-    }
+.btn-warning {
+    background: #f39c12;
 }
 
-@media (max-width: 768px) {
-    .container { margin: 5px; padding: 10px; }
-    table { font-size: 12px; }
-    th, td { padding: 8px 4px; }
-    .nav-links { flex-direction: column; gap: 10px; }
+.btn-warning:hover {
+    background: #e67e22;
 }
 
-/* Стили для карточек статистики */
-.stats-cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 15px;
-    margin-bottom: 30px;
+.success-message {
+    color: #27ae60;
+    font-weight: 600;
 }
 
-.stat-card {
-    background: white;
-    padding: 20px;
-    border-radius: 10px;
-    text-align: center;
-    box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+.error-message {
+    color: #e74c3c;
+    font-weight: 600;
 }
 
-.stat-value {
-    font-size: 2em;
-    font-weight: bold;
-    color: #2c3e50;
-    margin-bottom: 5px;
-}
-
-.stat-label {
-    color: #7f8c8d;
-    font-size: 0.9em;
-}
-
-.section {
-    background: white;
+/* Стили для фильтров в одну строку */
+.filters {
+    background: #f8f9fa;
     padding: 20px;
     border-radius: 10px;
     margin-bottom: 20px;
-    box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+    display: flex;
+    gap: 15px;
+    align-items: end;
+    flex-wrap: wrap;
 }
 
-.section h2 {
-    margin-bottom: 15px;
-    color: #2c3e50;
+.filter-group {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 150px;
+}
+
+.filter-group label {
+    font-weight: 600;
+    margin-bottom: 5px;
+    color: #495057;
+    font-size: 12px;
+}
+
+.filter-group input {
+    padding: 10px 12px;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    font-size: 14px;
+    background: white;
+}
+
+/* Placeholder тусклым цветом */
+.filter-group input::placeholder {
+    color: #adb5bd;
+    font-style: italic;
+}
+
+.filter-group input:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
+}
+
+/* Кнопка фильтра */
+.filter-group:last-child {
+    flex: 0 0 auto;
+    min-width: auto;
+}
+
+.filter-group .btn {
+    white-space: nowrap;
+    height: 42px; /* Выравниваем по высоте инпутов */
 }

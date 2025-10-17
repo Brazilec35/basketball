@@ -1,42 +1,29 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Basketball Parser - Аналитика</title>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link rel="stylesheet" href="/static/styles.css">
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>📈 Аналитика ставок</h1>
-            <div class="nav-links">
-                <a href="/">📊 Live матчи</a>
-                <a href="/archive">📁 Архив</a>
-                <a href="/analytics" class="active">📈 Аналитика</a>
-            </div>
-        </div>
-        <div class="control-panel">
-            <button onclick="rescanMatches()" class="btn btn-warning">
-                🔍 Перепроверить завершенные матчи
-            </button>
-            <div id="rescanResult" style="margin-top: 10px;"></div>
-        </div>
-        <!-- Статистика -->
-        <div class="stats-cards" id="statsCards">
-            <div class="loading">Загрузка статистики...</div>
-        </div>
+{% extends "base_template.html" %}
 
-        <!-- История ставок -->
-        <div class="section">
-            <h2>История ставок</h2>
-            <div id="betHistory">
-                <div class="loading">Загрузка истории...</div>
-            </div>
-        </div>
+{% block title %}Аналитика ставок{% endblock %}
+{% block header_icon %}- Аналитика{% endblock %}
+
+{% block content %}
+    <div class="control-panel">
+        <button onclick="rescanMatches()" class="btn btn-warning">
+            🔍 Перепроверить завершенные матчи
+        </button>
+        <div id="rescanResult" style="margin-top: 10px;"></div>
     </div>
 
+    <div class="stats-cards" id="statsCards">
+        <div class="loading">Загрузка статистики...</div>
+    </div>
+
+    <div class="section">
+        <h2>История ставок</h2>
+        <div id="betHistory">
+            <div class="loading">Загрузка истории...</div>
+        </div>
+    </div>
+{% endblock %}
+
+{% block scripts %}
+    <script src="/static/chart.js"></script>
     <script src="/static/analytics.js"></script>
-</body>
-</html>
+{% endblock %}

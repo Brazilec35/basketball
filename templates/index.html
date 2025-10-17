@@ -1,70 +1,18 @@
-<!-- index.html - Главная страница баскетбольного парсера -->
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Basketball Parser</title>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@2.2.1/dist/chartjs-plugin-annotation.min.js"></script>
-    <link rel="stylesheet" href="/static/styles.css">
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>🏀 Basketball Parser Live</h1>
-            <div class="nav-links">
-                <a href="/" class="active">📊 Live матчи</a>
-                <a href="/archive">📁 Архив</a>
-                <a href="/analytics">📈 Аналитика</a>
-            </div>
-            <div class="stats" id="stats">
-                Загрузка данных...
-            </div>
-        </div>
+{% extends "base_template.html" %}
 
-        <div id="matches-table">
-            <div class="loading">🔄 Загрузка данных матчей...</div>
-        </div>
+{% block title %}Live матчи{% endblock %}
+{% block header_icon %}Live{% endblock %}
+
+{% block content %}
+    <div class="stats" id="stats">Загрузка данных...</div>
+    <div id="matches-table">
+        <div class="loading">🔄 Загрузка данных матчей...</div>
     </div>
+{% endblock %}
 
-    <!-- Модальное окно для графика -->
-    <div id="chartModal" class="modal">
-        <div class="modal-content">
-            <span class="close">&times;</span>
-            <div id="chartTitle" class="chart-title"></div>
-            <div class="chart-container">
-                <canvas id="matchChart"></canvas>
-            </div>
-        </div>
-    </div>
-
-    <div id="changeIndicator" class="change-indicator">
-        <div class="change-content">
-            <div class="change-header">🔄 Обновление данных</div>
-            <div class="change-stats">
-                <div class="change-item">
-                    <span class="change-label">Очки:</span>
-                    <span class="change-value" id="changePoints">0</span>
-                    <span class="change-diff" id="changePointsDiff">+0</span>
-                </div>
-                <div class="change-item">
-                    <span class="change-label">Темп:</span>
-                    <span class="change-value" id="changePace">0</span>
-                    <span class="change-diff" id="changePaceDiff">+0</span>
-                </div>
-                <div class="change-item">
-                    <span class="change-label">Тотал:</span>
-                    <span class="change-value" id="changeTotal">0</span>
-                    <span class="change-diff" id="changeTotalDiff">+0</span>
-                </div>
-            </div>
-        </div>
-    </div>
-
+{% block scripts %}
     <script src="/static/app.js"></script>
     <script src="/static/utils.js"></script>
-    <script src="/static/websocket.js"></script>
     <script src="/static/chart.js"></script>
-</body>
-</html>
+    <script src="/static/websocket.js"></script>
+{% endblock %}

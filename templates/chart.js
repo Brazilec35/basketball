@@ -1,4 +1,11 @@
 <!-- chart.js-->
+
+// Глобальные переменные для графика
+var currentChart = null;
+var currentOpenMatchId = null;
+var previousChartData = null;
+var changeIndicatorTimeout = null;
+
 // Функции для обновления легенды графика
 function updateLegendLabels(chart) {
     const datasets = chart.data.datasets;
@@ -29,7 +36,6 @@ function updateDatasetLabels(chart) {
 function refreshChart(newData) {
     if (!currentChart || !newData.timestamps) return;
     
-    showChangesIndicator(newData);            
     window.currentChartData = newData;
     
     const totalValues = newData.total_values.filter(val => val !== null && val !== undefined);
@@ -163,6 +169,7 @@ function createChart(chartData, teams, tournament, currentTime) {
     const totalValues = chartData.total_values.filter(val => val !== null && val !== undefined);
     const maxTotal = totalValues.length > 0 ? Math.max(...totalValues) : null;
     const minTotal = totalValues.length > 0 ? Math.min(...totalValues) : null;
+    updateChartTitleForAnalytics(chartData, teams, tournament, currentTime);
     const annotations = {};
     if (betTimestampIndex !== -1) {
         annotations.betLine = {
@@ -185,6 +192,18 @@ function createChart(chartData, teams, tournament, currentTime) {
                     weight: 'bold'
                 }
             }
+        };
+        
+        // ДОБАВЛЯЕМ ТОЧКУ СТАВКИ
+        annotations.betPoint = {
+            type: 'point',
+            xValue: betTimestampIndex,
+            yValue: chartData.total_values[betTimestampIndex],
+            backgroundColor: 'rgb(255, 215, 0)',
+            borderColor: 'rgb(255, 215, 0)',
+            borderWidth: 3,
+            radius: 6,
+            pointStyle: 'circle'
         };
     }
     previousChartData = null;
@@ -354,4 +373,60 @@ function createChart(chartData, teams, tournament, currentTime) {
     
     updateDatasetLabels(currentChart);
     currentChart.update('active');
+}
+
+// ФУНКЦИЯ ДЛЯ ОБНОВЛЕНИЯ ЗАГОЛОВКА В АНАЛИТИКЕ
+function updateChartTitleForAnalytics(chartData, teams, tournament, currentTime) {
+    if (!chartData.timestamps || chartData.timestamps.length === 0) return;
+    
+    const lastIndex = chartData.timestamps.length - 1;
+    const currentValues = {
+        totalPoints: chartData.total_points[lastIndex] || '-',
+        totalValue: chartData.total_values[lastIndex] || '-',
+        pace: chartData.pace_data[lastIndex] || '-',
+        timestamp: chartData.timestamps[lastIndex] || '-',
+        score: chartData.scores ? chartData.scores[lastIndex] : '-'
+    };
+    
+    const totalValues = chartData.total_values.filter(val => val !== null && val !== undefined);
+    const maxTotal = totalValues.length > 0 ? Math.max(...totalValues) : null;
+    
+    const initialTotal = chartData.initial_total || (chartData.total_values && chartData.total_values[0]);
+    const currentTotal = chartData.total_values && chartData.total_values[lastIndex];
+    
+    let totalDiffHtml = '';
+    if (initialTotal && currentTotal) {
+        const totalDiff = (currentTotal - initialTotal).toFixed(1);
+        const totalDiffPercent = ((currentTotal - initialTotal) / initialTotal * 100).toFixed(1);
+        totalDiffHtml = `💹 Δ Тотала: <strong>${totalDiff > 0 ? '+' : ''}${totalDiff} (${totalDiffPercent > 0 ? '+' : ''}${totalDiffPercent}%)</strong>`;
+    }
+    
+    let maxTotalHtml = '';
+    if (maxTotal) {
+        maxTotalHtml = `📈 Макс. тотал: <strong>${maxTotal.toFixed(1)}</strong>`;
+    }
+    
+    const chartTitle = document.getElementById('chartTitle');
+    if (chartTitle) {
+        chartTitle.innerHTML = `
+            <div style="text-align: center; padding: 5px 0;">
+                <div style="font-size: 20px; font-weight: bold; color: #2c3e50; margin-bottom: 3px;">
+                    ${teams}
+                </div>
+                <div style="font-size: 14px; color: #5d6d7e; margin-bottom: 4px;">
+                    ${tournament || 'Архивный матч'} 
+                </div>
+                <div style="font-size: 16px; color: #7f8c8d; background: #f8f9fa; padding: 6px 12px; border-radius: 12px; margin-bottom: 3px;">
+                    ⏱️ ${currentValues.timestamp} | 📊 ${currentValues.score}
+                </div>
+                <div style="font-size: 16px; color: #2c3e50; background: #e8f4fd; padding: 4px 10px; border-radius: 8px; margin-top: 2px;">
+                    🏀 Очки: <strong>${currentValues.totalPoints}</strong> | 
+                    📈 Тотал: <strong>${currentValues.totalValue}</strong> |
+                    ⚡ Темп: <strong>${currentValues.pace}</strong> |
+                    ${totalDiffHtml} |
+                    ${maxTotalHtml}
+                </div>
+            </div>
+        `;
+    }
 }

@@ -11,7 +11,7 @@ from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-
+from config import BET_CONFIG
 from database import Database, safe_float, safe_int
 
 app = FastAPI(title="Basketball Parser")
@@ -242,23 +242,46 @@ async def get_archive_matches(
     team: str = None,
     limit: int = 100
 ):
-    """Получение завершенных матчей"""
+    """Получение завершенных матчей с полной информацией"""
     try:
         loop = asyncio.get_event_loop()
 
-        # Базовый SQL запрос
+        # ОБНОВЛЕННЫЙ ЗАПРОС - добавляем статусы и данные о ставках
         query = '''
             SELECT 
-                m.id, m.teams, m.tournament, m.created_at,
+                m.id, 
+                m.teams, 
+                m.tournament, 
+                m.status,
+                m.current_time,
+                m.total_match_time,
+                m.created_at,
+                m.updated_at as finished_date,
                 ms_final.score as final_score,
                 ms_final.total_points as final_points,
                 ms_final.total_value as final_total,
                 ms_first.total_value as initial_total,
-                m.updated_at as finished_date
+                mb.triggered_at,
+                mb.total_value as bet_total,
+                mb.diff_percent as bet_diff_percent,
+                ba.bet_result,
+                ba.final_points as bet_final_points
             FROM matches m
             JOIN match_stats ms_final ON m.id = ms_final.match_id
             JOIN match_stats ms_first ON m.id = ms_first.match_id
+            LEFT JOIN match_bets mb ON m.id = mb.match_id
+            LEFT JOIN bet_analysis ba ON m.id = ba.match_id
             WHERE m.status = 'finished'
+            AND (
+                -- МАТЧ СЧИТАЕТСЯ ЗАВЕРШЕННЫМ ЕСЛИ:
+                -- 1. Время матча близко к полному (39+/47+ минут)
+                (m.total_match_time = 40 AND CAST(SUBSTR(m.current_time, 1, 2) AS INTEGER) >= 39) OR
+                (m.total_match_time = 48 AND CAST(SUBSTR(m.current_time, 1, 2) AS INTEGER) >= 47) OR
+                (m.total_match_time != 40 AND m.total_match_time != 48 AND 
+                 CAST(SUBSTR(m.current_time, 1, 2) AS INTEGER) >= m.total_match_time - 1) OR
+                -- 2. ИЛИ есть результат анализа ставки (значит матч точно доигран)
+                ba.bet_result IS NOT NULL
+            )
             AND ms_final.recorded_at = (
                 SELECT MAX(recorded_at) FROM match_stats WHERE match_id = m.id
             )
@@ -299,20 +322,27 @@ async def get_archive_matches(
                 'id': match[0],
                 'teams': match[1],
                 'tournament': match[2],
-                'created_at': match[3],
-                'final_score': match[4],
-                'final_points': match[5],
-                'final_total': match[6],
-                'initial_total': match[7],
-                'finished_date': match[8]
+                'status': match[3],  # ← СТАТУС
+                'current_time': match[4],
+                'total_match_time': match[5],
+                'created_at': match[6],
+                'finished_date': match[7],
+                'final_score': match[8],
+                'final_points': match[9],
+                'final_total': match[10],
+                'initial_total': match[11],
+                # Данные о ставках
+                'triggered_at': match[12],
+                'bet_total': match[13],
+                'bet_diff_percent': match[14],
+                'bet_result': match[15],
+                'bet_final_points': match[16]
             }
 
             # Рассчитываем дополнительные показатели
             if match_data['final_points'] and match_data['final_total']:
-                # Для архивных матчей темп = финальные очки
                 final_pace = match_data['final_points']
-                deviation = (
-                    (final_pace - match_data['final_total']) / match_data['final_total']) * 100
+                deviation = ((final_pace - match_data['final_total']) / match_data['final_total']) * 100
                 match_data['final_pace'] = round(final_pace, 1)
                 match_data['final_deviation'] = round(deviation, 1)
                 match_data['total_result'] = 'OVER' if final_pace > match_data['final_total'] else 'UNDER'
@@ -327,17 +357,13 @@ async def get_archive_matches(
         }
 
         if stats['total_matches'] > 0:
-            stats['over_percentage'] = round(
-                (stats['over_matches'] / stats['total_matches']) * 100, 1)
-            stats['under_percentage'] = round(
-                (stats['under_matches'] / stats['total_matches']) * 100, 1)
+            stats['over_percentage'] = round((stats['over_matches'] / stats['total_matches']) * 100, 1)
+            stats['under_percentage'] = round((stats['under_matches'] / stats['total_matches']) * 100, 1)
 
             # Среднее отклонение
-            deviations = [m.get('final_deviation', 0)
-                          for m in formatted_matches if m.get('final_deviation')]
+            deviations = [m.get('final_deviation', 0) for m in formatted_matches if m.get('final_deviation')]
             if deviations:
-                stats['avg_deviation'] = round(
-                    sum(deviations) / len(deviations), 1)
+                stats['avg_deviation'] = round(sum(deviations) / len(deviations), 1)
 
         return {
             "matches": formatted_matches,
@@ -542,11 +568,14 @@ async def get_analytics_history(limit: int = 50):
         loop = asyncio.get_event_loop()
         history = await loop.run_in_executor(None, lambda: db.conn.execute('''
             SELECT 
+                m.id,                                                           
                 m.teams,
                 m.tournament,
                 ba.final_score,
                 ba.final_points,
                 mb.total_value as bet_total,
+                mb.triggered_at,
+                mb.initial_total,
                 ba.bet_result,
                 ba.total_diff,
                 ba.total_diff_percent,
@@ -560,23 +589,43 @@ async def get_analytics_history(limit: int = 50):
         
         formatted_history = []
         for row in history:
+            # ВЫЧИСЛЯЕМ РАЗНИЦУ МЕЖДУ НАЧАЛЬНЫМ ТОТАЛОМ И ФИНАЛЬНЫМИ ОЧКАМИ
+            initial_total = row[7]
+            final_points = row[4]
+            initial_final_diff = 0
+            initial_final_diff_percent = 0
+            
+            if initial_total and final_points and initial_total > 0:
+                initial_final_diff = final_points - initial_total
+                initial_final_diff_percent = (initial_final_diff / initial_total) * 100
+
             formatted_history.append({
-                'teams': row[0],
-                'tournament': row[1],
-                'final_score': row[2],
-                'final_points': row[3],
-                'bet_total': row[4],
-                'bet_result': row[5],
-                'total_diff': round(row[6], 1) if row[6] else 0,
-                'total_diff_percent': round(row[7], 1) if row[7] else 0,
-                'analyzed_at': row[8]
+                'match_id': row[0],
+                'teams': row[1],
+                'tournament': row[2],
+                'final_score': row[3],
+                'final_points': row[4],
+                'bet_total': row[5],
+                'triggered_at': row[6],
+                'initial_total': initial_total,
+                'initial_final_diff': initial_final_diff,           # ← АБСОЛЮТНАЯ разница
+                'initial_final_diff_percent': initial_final_diff_percent,  # ← разница в %
+                'bet_result': row[8],
+                'total_diff': round(row[9], 1) if row[9] else 0,
+                'total_diff_percent': round(row[10], 1) if row[10] else 0,
+                'analyzed_at': row[11]
             })
             
-        return {"history": formatted_history}
+        return {
+            "history": formatted_history,
+            "config": {
+                "trigger_percent": BET_CONFIG['TRIGGER_PERCENT']
+            }
+        }
         
     except Exception as e:
         logging.error(f"Ошибка получения истории: {e}")
-        return {"history": []}
+        return {"history": [], "config": {"trigger_percent": 15}}
 
 
 @app.get("/analytics", response_class=HTMLResponse)

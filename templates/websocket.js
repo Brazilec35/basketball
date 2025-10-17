@@ -1,4 +1,4 @@
-<!-- websocket.js-->
+// websocket.js
 // WebSocket соединение для live-обновлений
 function connectWebSocket() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -40,11 +40,11 @@ function connectWebSocket() {
 
 // Функция обновления открытого графика
 function updateOpenChart(matches) {
-    if (!currentOpenMatchId || !currentChart) return;
+    if (!window.currentOpenMatchId || !window.currentChart) return;
     
-    const currentMatch = matches.find(match => match.id === currentOpenMatchId);
+    const currentMatch = matches.find(match => match.id === window.currentOpenMatchId);
     if (currentMatch) {
-        fetch(`/api/matches/${currentOpenMatchId}/chart`)
+        fetch(`/api/matches/${window.currentOpenMatchId}/chart`)
             .then(response => response.json())
             .then(data => {
                 if (!data.error) {

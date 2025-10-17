@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Basketball Parser - {% block title %}{% endblock %}</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@2.2.1/dist/chartjs-plugin-annotation.min.js"></script>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏀 Basketball Parser {% block header_icon %}{% endblock %}</h1>
+            <div class="nav-links">
+                <a href="/" {% if request.url.path == '/' %}class="active"{% endif %}>📊 Live матчи</a>
+                <a href="/archive" {% if request.url.path == '/archive' %}class="active"{% endif %}>📁 Архив</a>
+                <a href="/analytics" {% if request.url.path == '/analytics' %}class="active"{% endif %}>📈 Аналитика</a>
+            </div>
+        </div>
+
+        {% block content %}{% endblock %}
+    </div>
+
+    <!-- Общие модальные окна -->
+    <div id="chartModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeChartModal()">&times;</span>
+            <div id="chartTitle" class="chart-title"></div>
+            <div class="chart-container">
+                <canvas id="matchChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function closeChartModal() {
+            document.getElementById('chartModal').style.display = 'none';
+            if (window.currentChart) {
+                window.currentChart.destroy();
+                window.currentChart = null;
+            }
+        }
+    </script>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>
