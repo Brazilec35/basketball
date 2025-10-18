@@ -24,6 +24,14 @@ function updateLegendLabels(chart) {
     });
 }
 
+function timeToMinutes(timeStr) {
+    if (!timeStr || timeStr === '-') return 0;
+    const parts = timeStr.split(':');
+    const minutes = parseInt(parts[0]) || 0;
+    const seconds = parseInt(parts[1]) || 0;
+    return minutes + (seconds / 60);
+}
+
 function updateDatasetLabels(chart) {
     if (!chart || !chart.data || !chart.data.datasets) return;
     
@@ -38,23 +46,56 @@ function refreshChart(newData) {
     
     window.currentChartData = newData;
     
+    // Конвертируем временные метки в минуты для оси X
+    const xValues = newData.timestamps.map(timeToMinutes);
+    
     const totalValues = newData.total_values.filter(val => val !== null && val !== undefined);
     const maxTotal = totalValues.length > 0 ? Math.max(...totalValues) : null;
     const minTotal = totalValues.length > 0 ? Math.min(...totalValues) : null;
     
-    currentChart.data.labels = newData.timestamps;
-    currentChart.data.datasets[0].data = newData.total_points;
-    currentChart.data.datasets[1].data = newData.total_values;
-    currentChart.data.datasets[2].data = newData.pace_data;
+    // Обновляем данные с новой структурой (x, y)
+    currentChart.data.datasets[0].data = xValues.map((x, i) => ({ 
+        x: x, 
+        y: newData.total_points[i] 
+    }));
     
+    currentChart.data.datasets[1].data = xValues.map((x, i) => ({ 
+        x: x, 
+        y: newData.total_values[i] 
+    }));
+    
+    currentChart.data.datasets[2].data = xValues.map((x, i) => ({ 
+        x: x, 
+        y: newData.pace_data[i] 
+    }));
+    
+    // Обновляем линии макс/мин тоталов
     if (maxTotal && currentChart.data.datasets[3]) {
-        currentChart.data.datasets[3].data = newData.timestamps.map(() => maxTotal);
+        currentChart.data.datasets[3].data = xValues.map(x => ({ 
+            x: x, 
+            y: maxTotal 
+        }));
         currentChart.data.datasets[3].label = `Макс. тотал: ${maxTotal}`;
     }
     
     if (minTotal && currentChart.data.datasets[4]) {
-        currentChart.data.datasets[4].data = newData.timestamps.map(() => minTotal);
+        currentChart.data.datasets[4].data = xValues.map(x => ({ 
+            x: x, 
+            y: minTotal 
+        }));
         currentChart.data.datasets[4].label = `Мин. тотал: ${minTotal}`;
+    }
+    
+    // Обновляем аннотации для ставки (если есть)
+    if (newData.bet_timestamp && currentChart.options.plugins.annotation) {
+        const betMinutes = timeToMinutes(newData.bet_timestamp);
+        const betIndex = xValues.findIndex(x => x === betMinutes);
+        
+        if (betIndex !== -1) {
+            currentChart.options.plugins.annotation.annotations.betLine.xMin = betMinutes;
+            currentChart.options.plugins.annotation.annotations.betLine.xMax = betMinutes;
+            currentChart.options.plugins.annotation.annotations.betPoint.xValue = betMinutes;
+        }
     }
     
     updateDatasetLabels(currentChart);
@@ -156,7 +197,8 @@ function showMatchChart(matchId, teams) {
 function createChart(chartData, teams, tournament, currentTime) {
     const ctx = document.getElementById('matchChart').getContext('2d');
     if (currentChart) currentChart.destroy();
-    
+    // Конвертируем временные метки в минуты для оси X
+    const xValues = chartData.timestamps.map(timeToMinutes);
     window.currentChartData = chartData;
     // Ищем индекс времени ставки в массиве временных меток
     let betTimestampIndex = -1;
@@ -183,8 +225,8 @@ function createChart(chartData, teams, tournament, currentTime) {
             if (periodIndex !== -1) {
                 periodAnnotations[`period_${index + 1}`] = {
                     type: 'line',
-                    xMin: periodIndex,  // ✅ используем индекс, а не минуты
-                    xMax: periodIndex,
+                    xMin: minute,  // ✅ используем индекс, а не минуты
+                    xMax: minute,
                     yMin: 0,
                     yMax: 'max',
                     borderColor: 'rgba(255, 165, 0, 0.6)',
@@ -247,7 +289,7 @@ function createChart(chartData, teams, tournament, currentTime) {
                 {
                     label: 'Очки',
                     originalLabel: 'Очки',
-                    data: chartData.total_points,
+                    data: xValues.map((x, i) => ({x: x, y: chartData.total_points[i]})),
                     borderColor: 'rgb(75, 192, 192)',
                     backgroundColor: 'rgba(75, 192, 192, 0.1)',
                     borderWidth: 2,
@@ -257,7 +299,7 @@ function createChart(chartData, teams, tournament, currentTime) {
                 {
                     label: 'Линия тотала',
                     originalLabel: 'Линия тотала',
-                    data: chartData.total_values,
+                    data: xValues.map((x, i) => ({x: x, y: chartData.total_values[i]})),
                     borderColor: 'rgb(255, 99, 132)',
                     backgroundColor: 'rgba(255, 99, 132, 0.1)',
                     borderWidth: 2,
@@ -268,7 +310,7 @@ function createChart(chartData, teams, tournament, currentTime) {
                 {
                     label: 'Темп игры',
                     originalLabel: 'Темп игры',
-                    data: chartData.pace_data,
+                    data: xValues.map((x, i) => ({x: x, y: chartData.total_values[i]})),
                     borderColor: 'rgb(153, 102, 255)',
                     backgroundColor: 'rgba(153, 102, 255, 0.1)',
                     borderWidth: 2,
@@ -328,17 +370,26 @@ function createChart(chartData, teams, tournament, currentTime) {
             maintainAspectRatio: false,
             interaction: { mode: 'index', intersect: false },
             scales: {
-                x: { 
-                    title: { 
-                        display: true, 
-                        text: 'Время матча',
-                        font: { size: 14 }
-                    },
-                    grid: { color: 'rgba(0, 0, 0, 0.1)' },
-                    ticks: {
-                        font: { size: 12 }
+            x: {
+                type: 'linear',
+                title: {
+                    display: true,
+                    text: 'Минуты матча'
+                },
+                ticks: {
+                    stepSize: 1, // Шаг сетки 1 минута
+                    callback: function(value) {
+                        // Отображаем только целые минуты
+                        return Number.isInteger(value) ? value + "'" : '';
                     }
                 },
+                grid: {
+                    color: function(context) {
+                        // Более яркая сетка для целых минут
+                        return Number.isInteger(context.tick.value) ? 'rgba(0,0,0,0.1)' : 'rgba(0,0,0,0.05)';
+                    }
+                }
+            },
                 y: { 
                     title: { 
                         display: true, 
