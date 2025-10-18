@@ -51,6 +51,8 @@ class Database:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 match_id INTEGER,
                 timestamp TEXT NOT NULL,
+                period_number INTEGER DEFAULT 1,
+                match_status TEXT DEFAULT 'playing',
                 score TEXT,
                 total_points INTEGER,
                 total_value REAL,
@@ -60,7 +62,7 @@ class Database:
                 p2_odds REAL,
                 recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (match_id) REFERENCES matches (id),
-                UNIQUE(match_id, timestamp)
+                UNIQUE(match_id, timestamp, period_number, match_status)
             )
         ''')
 
@@ -124,36 +126,48 @@ class Database:
             return match_id, 'new'
 
     def save_match_data(self, match_data):
-        """Сохранение данных матча с сохранением последних значений"""
+        """Сохранение данных матча с определением периода и статуса"""
         try:
             match_id, match_type = self.get_or_create_match(match_data)
-
-            # Логируем полученные данные
-            logging.info(
-                f"Сохранение матча {match_data['teams']}: score={match_data['score']}, total_points={match_data.get('total_points')}")
-
-            # Обновляем статус матча на 'active' при каждом обновлении
+            
+            # Определяем период и статус на основе времени матча
+            period_info = self._determine_period_and_status(
+                match_data['time'], 
+                match_data['total_match_time']
+            )
+            
+            # Обновляем matches с текущим периодом
             self.conn.execute(
-                'UPDATE matches SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-                ('active', match_id)
+                'UPDATE matches SET current_time = ?, total_match_time = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+                (match_data['time'], match_data['total_match_time'], match_id)
             )
 
+            # Подготавливаем данные
             last_values = self._get_last_match_values(match_id)
             prepared_data = self._prepare_match_data(match_data, last_values)
-
-            existing_timestamp = self._get_last_timestamp(match_id)
-            current_timestamp = match_data['time']
-
-            if existing_timestamp != current_timestamp:
+            
+            # Проверяем изменились ли данные (счет, тотал, период, статус)
+            should_save = self._should_save_record(
+                match_id, 
+                match_data['time'], 
+                period_info['period_number'],
+                period_info['match_status'],
+                prepared_data
+            )
+            
+            if should_save:
+                # Сохраняем с информацией о периоде и статусе
                 self.conn.execute('''
                     INSERT INTO match_stats 
-                    (match_id, timestamp, score, total_points, total_value, under_odds, over_odds, p1_odds, p2_odds)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (match_id, timestamp, period_number, match_status, score, total_points, total_value, under_odds, over_odds, p1_odds, p2_odds)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     match_id,
-                    current_timestamp,
+                    match_data['time'],
+                    period_info['period_number'],
+                    period_info['match_status'],
                     prepared_data['score'],
-                    prepared_data['total_points'],  # Должно быть числом
+                    prepared_data['total_points'],
                     prepared_data['total_value'],
                     prepared_data['under_odds'],
                     prepared_data['over_odds'],
@@ -161,14 +175,13 @@ class Database:
                     prepared_data['p2_odds']
                 ))
                 self.conn.commit()
+                
+                # Проверяем условие для ставки
                 self._check_bet_condition(match_id, match_data, prepared_data)
-                # Логируем сохраненные данные
-                logging.info(
-                    f"Сохранено: total_points={prepared_data['total_points']}")
-
-                return True, match_type, 'new_timestamp'
+                
+                return True, match_type, 'new_record'
             else:
-                return True, match_type, 'same_timestamp'
+                return True, match_type, 'no_changes'
 
         except Exception as e:
             logging.error(f"Ошибка сохранения в БД: {e}")
@@ -501,3 +514,84 @@ class Database:
         except Exception as e:
             logging.error(f"Ошибка перепроверки: {e}")
             return {"error": str(e)}
+        
+    def _determine_period_and_status(self, match_time, total_match_time):
+        """Определяет номер периода и статус на основе времени матча"""
+        try:
+            if match_time == '-' or not match_time:
+                return {'period_number': 1, 'match_status': 'playing'}
+            
+            # Парсим время матча (формат "MM:SS")
+            parts = match_time.split(':')
+            minutes = int(parts[0]) if parts[0].isdigit() else 0
+            seconds = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 0
+            total_seconds = minutes * 60 + seconds
+            
+            # Определяем границы периодов
+            if total_match_time == 48:  # NBA формат
+                period_breaks = [12*60, 24*60, 36*60]  # в секундах
+                period_duration = 12 * 60
+            else:  # 40-минутный формат
+                period_breaks = [10*60, 20*60, 30*60]  # в секундах
+                period_duration = 10 * 60
+            
+            # Определяем период
+            period_number = 1
+            for i, break_time in enumerate(period_breaks):
+                if total_seconds >= break_time:
+                    period_number = i + 2
+                else:
+                    break
+            
+            # Определяем статус
+            if total_seconds in period_breaks:
+                match_status = 'quarter_break'
+            elif total_seconds == period_breaks[1]:  # половина матча
+                match_status = 'halftime' 
+            else:
+                match_status = 'playing'
+            
+            return {
+                'period_number': period_number,
+                'match_status': match_status
+            }
+            
+        except Exception as e:
+            logging.error(f"Ошибка определения периода: {e}")
+            return {'period_number': 1, 'match_status': 'playing'}
+
+    def _should_save_record(self, match_id, timestamp, period_number, match_status, prepared_data):
+        """Определяет нужно ли сохранять запись (проверка изменений)"""
+        try:
+            # Получаем последнюю запись для этого матча
+            cursor = self.conn.execute('''
+                SELECT timestamp, period_number, match_status, score, total_points, total_value
+                FROM match_stats 
+                WHERE match_id = ? 
+                ORDER BY recorded_at DESC 
+                LIMIT 1
+            ''', (match_id,))
+            
+            last_record = cursor.fetchone()
+            
+            # Если нет предыдущих записей - сохраняем
+            if not last_record:
+                return True
+                
+            last_timestamp, last_period, last_status, last_score, last_points, last_total = last_record
+            
+            # Проверяем изменения
+            timestamp_changed = (timestamp != last_timestamp)
+            period_changed = (period_number != last_period)
+            status_changed = (match_status != last_status)
+            score_changed = (prepared_data['score'] != last_score)
+            points_changed = (prepared_data['total_points'] != last_points)
+            total_changed = (prepared_data['total_value'] != last_total)
+            
+            # Сохраняем если есть изменения во времени, периоде, статусе или данных
+            return (timestamp_changed or period_changed or status_changed or 
+                    score_changed or points_changed or total_changed)
+                    
+        except Exception as e:
+            logging.error(f"Ошибка проверки сохранения: {e}")
+            return True  # В случае ошибки сохраняем для безопасности

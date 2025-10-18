@@ -158,6 +158,9 @@ function createChart(chartData, teams, tournament, currentTime) {
     if (currentChart) currentChart.destroy();
     
     window.currentChartData = chartData;
+    
+    // Собираем данные о периодах из chartData
+    const periodAnnotations = createPeriodAnnotations(chartData);    
     // Ищем индекс времени ставки в массиве временных меток
     let betTimestampIndex = -1;
     if (chartData.bet_timestamp) {
@@ -170,7 +173,11 @@ function createChart(chartData, teams, tournament, currentTime) {
     const maxTotal = totalValues.length > 0 ? Math.max(...totalValues) : null;
     const minTotal = totalValues.length > 0 ? Math.min(...totalValues) : null;
     updateChartTitleForAnalytics(chartData, teams, tournament, currentTime);
-    const annotations = {};
+    
+    // СОЗДАЕМ annotations и ДОБАВЛЯЕМ ПЕРИОДЫ ПЕРВЫМИ
+    const annotations = { ...periodAnnotations };
+    
+    // Затем добавляем ставки если есть
     if (betTimestampIndex !== -1) {
         annotations.betLine = {
             type: 'line',
@@ -206,6 +213,7 @@ function createChart(chartData, teams, tournament, currentTime) {
             pointStyle: 'circle'
         };
     }
+    
     previousChartData = null;
     currentChart = new Chart(ctx, {
         type: 'line',
@@ -268,26 +276,7 @@ function createChart(chartData, teams, tournament, currentTime) {
                     pointHoverRadius: 0,
                     pointHitRadius: 0,
                     fill: false
-                },
-                {
-                    label: '🍀 Ставка',
-                    data: chartData.timestamps.map((timestamp, index) => {
-                        if (index === betTimestampIndex) {
-                            // Создаем вертикальную линию - много точек по Y
-                            return Array.from({length: 10}, (_, i) => {
-                                const minY = 0;  // Минимальное значение Y
-                                const maxY = maxTotal || 200;  // Максимальное значение Y
-                                return minY + (maxY - minY) * (i / 9);
-                            });
-                        }
-                        return null;
-                    }),
-                    borderColor: 'rgb(255, 215, 0)',
-                    borderWidth: 3,
-                    pointRadius: 0,
-                    fill: false,
-                    tension: 0
-                }       
+                }
             ]
         },
         options: {
@@ -347,7 +336,7 @@ function createChart(chartData, teams, tournament, currentTime) {
                     }
                 },
                 annotation: {
-                    annotations: annotations
+                    annotations: annotations  // ← ТЕПЕРЬ здесь ВСЕ аннотации
                 },                        
                 legend: {
                     display: true,
@@ -374,7 +363,35 @@ function createChart(chartData, teams, tournament, currentTime) {
     updateDatasetLabels(currentChart);
     currentChart.update('active');
 }
-
+function createPeriodAnnotations(chartData) {
+    const annotations = {};
+    
+    if (!chartData.periods_info) return annotations;
+    
+    // Добавляем вертикальные линии для каждого перерыва
+    chartData.periods_info.forEach((period, index) => {
+        if (period.break_start_index !== undefined) {
+            annotations[`period_break_${index}`] = {
+                type: 'line',
+                xMin: period.break_start_index,
+                xMax: period.break_start_index,
+                borderColor: 'rgba(128, 128, 128, 0.7)',
+                borderWidth: 2,
+                borderDash: [5, 5],
+                label: {
+                    display: true,
+                    content: `Q${period.period_number}`,
+                    position: 'start',
+                    backgroundColor: 'rgba(128, 128, 128, 0.8)',
+                    color: 'white',
+                    font: { size: 11, weight: 'bold' }
+                }
+            };
+        }
+    });
+    
+    return annotations;
+}
 // ФУНКЦИЯ ДЛЯ ОБНОВЛЕНИЯ ЗАГОЛОВКА В АНАЛИТИКЕ
 function updateChartTitleForAnalytics(chartData, teams, tournament, currentTime) {
     if (!chartData.timestamps || chartData.timestamps.length === 0) return;
