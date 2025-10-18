@@ -310,7 +310,7 @@ function createChart(chartData, teams, tournament, currentTime) {
                 {
                     label: 'Темп игры',
                     originalLabel: 'Темп игры',
-                    data: xValues.map((x, i) => ({x: x, y: chartData.total_values[i]})),
+                    data: xValues.map((x, i) => ({x: x, y: chartData.pace_data[i]})),
                     borderColor: 'rgb(153, 102, 255)',
                     backgroundColor: 'rgba(153, 102, 255, 0.1)',
                     borderWidth: 2,
@@ -321,7 +321,7 @@ function createChart(chartData, teams, tournament, currentTime) {
                 },
                 {
                     label: `Макс. тотал: ${maxTotal}`,
-                    data: chartData.timestamps.map(() => maxTotal),
+                    data: xValues.map(x => ({x: x, y: maxTotal})),
                     borderColor: 'rgba(231, 76, 60, 0.8)',
                     backgroundColor: 'rgba(231, 76, 60, 0.1)',
                     borderWidth: 2,
@@ -333,7 +333,7 @@ function createChart(chartData, teams, tournament, currentTime) {
                 },
                 {
                     label: `Мин. тотал: ${minTotal}`,
-                    data: chartData.timestamps.map(() => minTotal),
+                    data: xValues.map(x => ({x: x, y: minTotal})),
                     borderColor: 'rgba(46, 204, 113, 0.8)',
                     backgroundColor: 'rgba(46, 204, 113, 0.1)',
                     borderWidth: 2,
