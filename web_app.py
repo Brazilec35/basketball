@@ -140,7 +140,7 @@ async def main_page(request: Request):
 
 @app.get("/api/matches/{match_id}/chart")
 async def get_match_chart(match_id: int):
-    """API для получения данных графика с информацией о периодах"""
+    """API для получения данных графика матча (работает и для архивных)"""
     try:
         loop = asyncio.get_event_loop()
 
@@ -153,8 +153,6 @@ async def get_match_chart(match_id: int):
                     ms.score,
                     ms.total_points,
                     ms.total_value,
-                    ms.period_number,
-                    ms.match_status,
                     ms.recorded_at
                 FROM match_stats ms
                 WHERE ms.match_id = ?
@@ -164,7 +162,14 @@ async def get_match_chart(match_id: int):
 
         if not history:
             return {"error": "Данные матча не найдены"}
-
+        # Получаем данные о ставке для этого матча
+        bet_data = await loop.run_in_executor(
+            None,
+            lambda: db.conn.execute(
+                'SELECT triggered_at FROM match_bets WHERE match_id = ?',
+                (match_id,)
+            ).fetchone()
+        )
         # Получаем общее время матча
         match_info = await loop.run_in_executor(
             None,
@@ -187,30 +192,31 @@ async def get_match_chart(match_id: int):
         total_points = []
         total_values = []
         pace_data = []
-        periods_info = []  # Информация о периодах
 
-        for i, record in enumerate(history):
-            timestamp, score, points, total_value, period_number, match_status, recorded_at = record
-            
+        for record in history:
+            timestamp = record[0] if record[0] else '0:00'
+            score = record[1] if record[1] else '-'
+            points = record[2] if record[2] is not None else 0
+            total_value = record[3] if record[3] is not None else 0
+
             timestamps.append(timestamp)
             scores.append(score)
             total_points.append(points)
             total_values.append(total_value)
 
-            # Расчет темпа
-            pace = calculate_pace_for_record(timestamp, points, total_match_time, total_value)
+            # ВЫЧИСЛЯЕМ ТЕМП ДЛЯ АРХИВНЫХ МАТЧЕЙ
+            pace = calculate_pace_for_record(
+                timestamp, points, total_match_time, total_value)
             pace_data.append(pace)
 
-            # Сохраняем информацию о начале периодов
-            if match_status in ['quarter_break', 'halftime']:
-                periods_info.append({
-                    'period_number': period_number,
-                    'break_start_index': i,  # Индекс в массиве данных
-                    'timestamp': timestamp,
-                    'match_status': match_status
-                })
+        # Для архивных матчей добавляем финальную информацию
+        final_result = None
+        if match_status == 'finished' and total_points:
+            final_points = total_points[-1] if total_points else 0
+            final_total = total_values[-1] if total_values else 0
+            if final_total > 0:
+                final_result = 'OVER' if final_points > final_total else 'UNDER'
 
-        # Формируем ответ
         chart_response = {
             "timestamps": timestamps,
             "scores": scores,
@@ -219,16 +225,13 @@ async def get_match_chart(match_id: int):
             "pace_data": pace_data,
             "period_lines": period_lines,
             "total_match_time": total_match_time,
-            "periods_info": periods_info,  # Добавляем информацию о периодах
-            "match_status": match_info[1] if match_info else 'finished'
+            "final_result": final_result,
+            "match_status": match_status
         }
 
-        # Добавляем финальный результат если матч завершен
-        if match_info and match_info[1] == 'finished' and total_points:
-            final_points = total_points[-1] if total_points else 0
-            final_total = total_values[-1] if total_values else 0
-            if final_total > 0:
-                chart_response["final_result"] = 'OVER' if final_points > final_total else 'UNDER'
+        # Если есть ставка - добавляем её время
+        if bet_data:
+            chart_response["bet_timestamp"] = bet_data[0]
 
         return chart_response
 

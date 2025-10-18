@@ -198,22 +198,23 @@ class BasketballParser:
             tournament_upper = tournament.upper()
 
             # Проверяем формат 4x12 (48 минут)
-            nba_related = ['NBA', 'CDBL', 'WCBA', 'PBA', 'PRIME DIVISION']
-            if any(word in tournament_upper for word in nba_related):
-                return 48
+            for key in MATCH_TIME_CONFIG:
+                if key in ['NBA', 'CDBL', 'WCBA', 'PBA', 'Prime Division']:
+                    if any(word in tournament_upper for word in [key.upper(), key]):
+                        return 48
 
             # Проверяем формат 4x10 (40 минут)
-            euro_related = ['WNBA', 'EUROLEAGUE', 'EUROCUP', 'VTB', 'IPBL', 
-                        'SUPERLEAGUE', 'ACB', 'LNB', 'LEGABASKET']
-            if any(word in tournament_upper for word in euro_related):
-                return 40
+            for key in MATCH_TIME_CONFIG:
+                if key not in ['NBA', 'CDBL', 'WCBA', 'PBA', 'Prime Division', 'DEFAULT_TIME']:
+                    if any(word in tournament_upper for word in [key.upper(), key]):
+                        return 40
 
             # Стандарт по умолчанию
-            return 40
+            return MATCH_TIME_CONFIG['DEFAULT_TIME']
 
         except Exception as e:
             logging.debug(f"Ошибка определения времени матча: {e}")
-            return 40
+            return MATCH_TIME_CONFIG['DEFAULT_TIME']
 
     def _find_tournament(self, match_element):
         """Поиск названия турнира для конкретного матча"""
