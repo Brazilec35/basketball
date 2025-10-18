@@ -171,6 +171,37 @@ function createChart(chartData, teams, tournament, currentTime) {
     const minTotal = totalValues.length > 0 ? Math.min(...totalValues) : null;
     updateChartTitleForAnalytics(chartData, teams, tournament, currentTime);
     const annotations = {};
+    const periodAnnotations = {};
+    
+    if (chartData.period_lines) {
+        chartData.period_lines.forEach((minute, index) => {
+            // Преобразуем минуты в формат времени
+            const timeLabel = `${minute}:00`;
+            // Находим индекс этого времени в массиве timestamps
+            const periodIndex = chartData.timestamps.findIndex(t => t === timeLabel);
+            
+            if (periodIndex !== -1) {
+                periodAnnotations[`period_${index + 1}`] = {
+                    type: 'line',
+                    xMin: periodIndex,  // ✅ используем индекс, а не минуты
+                    xMax: periodIndex,
+                    yMin: 0,
+                    yMax: 'max',
+                    borderColor: 'rgba(255, 165, 0, 0.6)',
+                    borderWidth: 2,
+                    borderDash: [5, 3],
+                    label: {
+                        display: true,
+                        content: `П${index + 1}`,
+                        position: 'start',
+                        backgroundColor: 'rgba(255, 165, 0, 0.8)',
+                        color: 'white',
+                        font: { size: 11, weight: 'bold' }
+                    }
+                };
+            }
+        });
+    }
     if (betTimestampIndex !== -1) {
         annotations.betLine = {
             type: 'line',
@@ -207,6 +238,7 @@ function createChart(chartData, teams, tournament, currentTime) {
         };
     }
     previousChartData = null;
+    const allAnnotations = { ...periodAnnotations, ...annotations };
     currentChart = new Chart(ctx, {
         type: 'line',
         data: {
@@ -290,6 +322,7 @@ function createChart(chartData, teams, tournament, currentTime) {
                 }       
             ]
         },
+
         options: {
             responsive: true,
             maintainAspectRatio: false,
@@ -347,7 +380,7 @@ function createChart(chartData, teams, tournament, currentTime) {
                     }
                 },
                 annotation: {
-                    annotations: annotations
+                    annotations: allAnnotations
                 },                        
                 legend: {
                     display: true,

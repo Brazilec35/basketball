@@ -100,7 +100,7 @@ class BasketballParser:
         return True
 
     def _parse_single_match(self, match_element):
-        """Парсинг одного матча"""
+        """Парсинг одного матча с определением периода"""
         try:
             # Основные данные
             teams = match_element.find_element(
@@ -151,20 +151,25 @@ class BasketballParser:
             except:
                 total = under = over = '-'
 
-            # Турнир - используем правильное название метода
+            # Турнир
             tournament = self._find_tournament(match_element)
 
             # Определяем общее время матча
-            total_match_time = self._get_total_match_time(
-                tournament, match_element)
+            total_match_time = self._get_total_match_time(tournament, match_element)
+
+            # 🆕 ВЫЧИСЛЯЕМ ПЕРИОД (теперь все данные готовы)
+            period = self._calculate_period(match_time, total_match_time)
+            
+            logging.info(f"🎯 Матч {teams}: время {match_time}, период {period}, формат {total_match_time}мин")
 
             return {
                 'teams': teams,
                 'tournament': tournament,
                 'time': match_time,
                 'total_match_time': total_match_time,
+                'period': period,  # 🆕 ДОБАВЛЯЕМ ПЕРИОД
                 'score': score,
-                'total_points': total_goals,  # ПЕРЕДАЕМ total_points
+                'total_points': total_goals,
                 'p1': p1,
                 'p2': p2,
                 'total': total,
@@ -254,3 +259,52 @@ class BasketballParser:
         except Exception as e:
             logging.debug(f"Ошибка поиска турнира: {e}")
             return "Неизвестно"
+
+    def _calculate_period(self, match_time, total_match_time):
+        """Вычисление периода матча на основе времени"""
+        try:
+            if not match_time or match_time == '-' or ':' not in match_time:
+                logging.debug(f"⚠️ Не могу определить период для времени: {match_time}")
+                return None
+
+            # Парсим время матча
+            parts = match_time.split(':')
+            minutes = int(parts[0]) if parts[0].isdigit() else 0
+            seconds = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 0
+            
+            logging.info(f"🕐 Анализ времени: '{match_time}' -> {minutes}мин {seconds}сек, формат: {total_match_time}мин")
+
+            # Определяем период в зависимости от формата
+            if total_match_time == 40:  # 4x10 минут
+                if minutes < 10:
+                    period = 1
+                elif minutes < 20:
+                    period = 2
+                elif minutes < 30:
+                    period = 3
+                elif minutes < 40:
+                    period = 4
+                else:
+                    period = 5  # овертайм
+                    
+            elif total_match_time == 48:  # 4x12 минут
+                if minutes < 12:
+                    period = 1
+                elif minutes < 24:
+                    period = 2
+                elif minutes < 36:
+                    period = 3
+                elif minutes < 48:
+                    period = 4
+                else:
+                    period = 5  # овертайм
+            else:
+                # По умолчанию для неизвестных форматов
+                period = (minutes // 10) + 1
+
+            logging.info(f"✅ Определен период: {period} для времени {match_time}")
+            return period
+
+        except Exception as e:
+            logging.error(f"❌ Ошибка вычисления периода для '{match_time}': {e}")
+            return None

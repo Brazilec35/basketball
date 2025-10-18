@@ -51,6 +51,7 @@ class Database:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 match_id INTEGER,
                 timestamp TEXT NOT NULL,
+                period INTEGER,
                 score TEXT,
                 total_points INTEGER,
                 total_value REAL,
@@ -92,6 +93,10 @@ class Database:
                 FOREIGN KEY (match_id) REFERENCES matches (id),
                 UNIQUE(match_id)
             )
+        ''')
+        self.conn.execute('''
+            CREATE INDEX IF NOT EXISTS idx_match_stats_period 
+            ON match_stats(period)
         ''')
         self.conn.commit()
 
@@ -147,11 +152,12 @@ class Database:
             if existing_timestamp != current_timestamp:
                 self.conn.execute('''
                     INSERT INTO match_stats 
-                    (match_id, timestamp, score, total_points, total_value, under_odds, over_odds, p1_odds, p2_odds)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (match_id, timestamp, period, score, total_points, total_value, under_odds, over_odds, p1_odds, p2_odds)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     match_id,
                     current_timestamp,
+                    match_data.get('period'),
                     prepared_data['score'],
                     prepared_data['total_points'],  # Должно быть числом
                     prepared_data['total_value'],

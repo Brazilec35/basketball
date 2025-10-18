@@ -179,6 +179,11 @@ async def get_match_chart(match_id: int):
             ).fetchone()
         )
         total_match_time = match_info[0] if match_info else 40
+        # Определяем линии периодов
+        if total_match_time == 48:
+            period_lines = [12, 24, 36, 48]
+        else:  # 40 минут по умолчанию
+            period_lines = [10, 20, 30, 40]        
         match_status = match_info[1] if match_info else 'finished'
 
         # Форматируем данные для графика
@@ -218,6 +223,7 @@ async def get_match_chart(match_id: int):
             "total_points": total_points,
             "total_values": total_values,
             "pace_data": pace_data,
+            "period_lines": period_lines,
             "total_match_time": total_match_time,
             "final_result": final_result,
             "match_status": match_status
