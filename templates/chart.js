@@ -8,6 +8,7 @@ var changeIndicatorTimeout = null;
 // ==================== ТЕПЛОВАЯ КАРТА ====================
 
 // Функция расчета очков за каждую минуту
+// Функция расчета очков за каждую минуту
 function calculatePointsPerMinute(chartData) {
     if (!chartData || !chartData.timestamps || !chartData.total_points) {
         return [];
@@ -15,10 +16,9 @@ function calculatePointsPerMinute(chartData) {
     
     try {
         const pointsPerMinute = [];
-        const minutesData = {};
+        const minuteData = {};
         
-        // Находим максимальную минуту матча
-        let maxMinute = 0;
+        // Собираем все данные по минутам
         chartData.timestamps.forEach((timestamp, index) => {
             if (!timestamp || timestamp === '-' || !timestamp.includes(':')) return;
             
@@ -26,38 +26,39 @@ function calculatePointsPerMinute(chartData) {
             const minute = parseInt(timeParts[0]) || 0;
             const points = chartData.total_points[index] || 0;
             
-            // Обновляем максимальную минуту
-            maxMinute = Math.max(maxMinute, minute);
-            
-            if (!minutesData[minute]) {
-                minutesData[minute] = {
-                    points: points,
-                    timestamp: timestamp
-                };
-            } else {
-                minutesData[minute].points = Math.max(minutesData[minute].points, points);
+            if (!minuteData[minute]) {
+                minuteData[minute] = [];
             }
+            minuteData[minute].push({
+                points: points,
+                timestamp: timestamp
+            });
         });
         
-        // 🔥 ОГРАНИЧИВАЕМ ДО ТЕКУЩЕГО ВРЕМЕНИ + небольшой запас
-        const maxTime = Math.min(maxMinute + 2, 60); // Максимум 60 минут
+        // Находим максимальную минуту
+        const maxMinute = Math.max(...Object.keys(minuteData).map(Number));
+        const maxTime = Math.min(maxMinute + 2, 60);
         
-        // Вычисляем очки за каждую минуту только до текущего времени
-        let previousPoints = 0;
+        // 🔥 ИСПРАВЛЕНИЕ: вычисляем очки за КАЖДУЮ минуту отдельно
         for (let minute = 0; minute <= maxTime; minute++) {
-            if (minutesData[minute]) {
-                const currentPoints = minutesData[minute].points;
-                const pointsThisMinute = currentPoints - previousPoints;
+            if (minuteData[minute] && minuteData[minute].length > 0) {
+                // Сортируем данные по времени внутри минуты
+                const minuteRecords = minuteData[minute].sort((a, b) => {
+                    return timeToMinutes(a.timestamp) - timeToMinutes(b.timestamp);
+                });
                 
-                const validPoints = Math.max(0, pointsThisMinute);
+                // Берем первую и последнюю запись в минуте
+                const firstRecord = minuteRecords[0];
+                const lastRecord = minuteRecords[minuteRecords.length - 1];
+                
+                // Очки за минуту = разница между началом и концом минуты
+                const pointsThisMinute = lastRecord.points - (minute > 0 ? getPointsAtMinuteEnd(minute - 1, minuteData) : 0);
                 
                 pointsPerMinute.push({
                     minute: minute,
-                    points: validPoints,
-                    timestamp: minutesData[minute].timestamp
+                    points: Math.max(0, pointsThisMinute),
+                    timestamp: lastRecord.timestamp
                 });
-                
-                previousPoints = currentPoints;
             } else {
                 pointsPerMinute.push({
                     minute: minute,
@@ -72,6 +73,17 @@ function calculatePointsPerMinute(chartData) {
         console.error('Ошибка расчета очков за минуту:', error);
         return [];
     }
+}
+
+// Вспомогательная функция для получения очков в конце минуты
+function getPointsAtMinuteEnd(minute, minuteData) {
+    if (minuteData[minute] && minuteData[minute].length > 0) {
+        const records = minuteData[minute].sort((a, b) => {
+            return timeToMinutes(a.timestamp) - timeToMinutes(b.timestamp);
+        });
+        return records[records.length - 1].points;
+    }
+    return 0;
 }
 
 // Функция определения цвета по количеству очков
