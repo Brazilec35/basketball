@@ -222,7 +222,11 @@ function updateDatasetLabels(chart) {
 // Функции для графика
 function refreshChart(newData) {
     if (!currentChart || !newData.timestamps) return;
-    
+    console.log('🔄 Обновление графика. Новые данные:', {
+        timestamps: newData.timestamps?.length,
+        scores: newData.scores?.length, 
+        lastScore: newData.scores?.[newData.scores.length - 1]
+    });    
     window.currentChartData = newData;
     
     // Конвертируем временные метки в минуты для оси X
@@ -293,68 +297,21 @@ function refreshChart(newData) {
     
     updateDatasetLabels(currentChart);
     currentChart.update('active');
+    
+    // 🔥 ОБНОВЛЯЕМ ЗАГОЛОВОК С ЧЕТВЕРТЯМИ (ВАЖНО!)
     updateChartTitleFromData(newData);
-}
-
-function updateChartTitleFromData(chartData) {
-    if (!chartData.timestamps || chartData.timestamps.length === 0) return;
-    
-    const lastIndex = chartData.timestamps.length - 1;
-    const currentValues = {
-        totalPoints: chartData.total_points[lastIndex] || '-',
-        totalValue: chartData.total_values[lastIndex] || '-',
-        pace: chartData.pace_data[lastIndex] || '-',
-        timestamp: chartData.timestamps[lastIndex] || '-',
-        score: chartData.scores ? chartData.scores[lastIndex] : '-'
-    };
-    
-    const totalValues = chartData.total_values.filter(val => val !== null && val !== undefined);
-    const maxTotal = totalValues.length > 0 ? Math.max(...totalValues) : null;
-    
-    const initialTotal = chartData.initial_total || (chartData.total_values && chartData.total_values[0]);
-    const currentTotal = chartData.total_values && chartData.total_values[lastIndex];
-    
-    let totalDiffHtml = '';
-    if (initialTotal && currentTotal) {
-        const totalDiff = (currentTotal - initialTotal).toFixed(1);
-        const totalDiffPercent = ((currentTotal - initialTotal) / initialTotal * 100).toFixed(1);
-        totalDiffHtml = `💹 Δ Тотала: <strong>${totalDiff > 0 ? '+' : ''}${totalDiff} (${totalDiffPercent > 0 ? '+' : ''}${totalDiffPercent}%)</strong>`;
-    }
-    
-    let maxTotalHtml = '';
-    if (maxTotal) {
-        maxTotalHtml = `📈 Макс. тотал: <strong>${maxTotal.toFixed(1)}</strong>`;
-    }
-    
-    const chartTitle = document.getElementById('chartTitle');
-    if (chartTitle && currentOpenMatchId) {
-        const matchInfo = getMatchInfoByMatchId(currentOpenMatchId);
-        chartTitle.innerHTML = `
-            <div style="text-align: center; padding: 5px 0;">
-                <div style="font-size: 20px; font-weight: bold; color: #2c3e50; margin-bottom: 3px;">
-                    ${matchInfo.teams}
-                </div>
-                <div style="font-size: 14px; color: #5d6d7e; margin-bottom: 4px;">
-                    ${matchInfo.tournament} 
-                </div>
-                <div style="font-size: 16px; color: #7f8c8d; background: #f8f9fa; padding: 6px 12px; border-radius: 12px; margin-bottom: 3px;">
-                    ⏱️ ${currentValues.timestamp} | 📊 ${currentValues.score}
-                </div>
-                <div style="font-size: 16px; color: #2c3e50; background: #e8f4fd; padding: 4px 10px; border-radius: 8px; margin-top: 2px;">
-                    🏀 Очки: <strong>${currentValues.totalPoints}</strong> | 
-                    📈 Тотал: <strong>${currentValues.totalValue}</strong> |
-                    ⚡ Темп: <strong>${currentValues.pace}</strong> |
-                    ${totalDiffHtml} |
-                    ${maxTotalHtml}
-                </div>
-            </div>
-        `;
-    }
+    console.log('✅ Заголовок с четвертями обновлен');
 }
 
 function showMatchChart(matchId, teams) {
     currentOpenMatchId = matchId;
     const matchInfo = getMatchInfoByMatchId(matchId);
+    
+    console.log('🔍 Информация о матче:', {
+        matchId: matchId,
+        teams: teams,
+        matchInfo: matchInfo
+    });
     
     fetch(`/api/matches/${matchId}/chart`)
         .then(response => response.json())
@@ -364,19 +321,11 @@ function showMatchChart(matchId, teams) {
                 return;
             }
             
-            document.getElementById('chartTitle').innerHTML = `
-                <div style="text-align: center; padding: 5px 0;">
-                    <div style="font-size: 20px; font-weight: bold; color: #2c3e50; margin-bottom: 3px;">
-                        ${teams}
-                    </div>
-                    <div style="font-size: 15px; color: #5d6d7e; margin-bottom: 4px;">
-                        ${matchInfo.tournament}
-                    </div>
-                    <div style="font-size: 14px; color: #7f8c8d; background: #f8f9fa; padding: 4px 12px; border-radius: 12px; display: inline-block;">
-                        ⏱️ Текущее время: <strong>${matchInfo.currentTime}</strong>
-                    </div>
-                </div>
-            `;
+            console.log('📊 Создание графика с данными:', {
+                teams: teams,
+                tournament: matchInfo.tournament,
+                currentTime: matchInfo.currentTime
+            });
             
             createChart(data, teams, matchInfo.tournament, matchInfo.currentTime);
             modal.style.display = 'block';
@@ -388,6 +337,11 @@ function showMatchChart(matchId, teams) {
 }
 
 function createChart(chartData, teams, tournament, currentTime) {
+    window.currentMatchInfo = {
+        teams: teams,
+        tournament: tournament,
+        currentTime: currentTime
+    };    
     const ctx = document.getElementById('matchChart').getContext('2d');
     if (currentChart) currentChart.destroy();
     // Конвертируем временные метки в минуты для оси X
@@ -794,4 +748,275 @@ function extendTooltipsForHeatmap(context) {
             item.label = `Минута ${item.parsed.x}: ${points} очков`;
         }
     });
+}
+
+// Функция расчета счета по четвертям
+function calculateQuarterScores(chartData) {
+    if (!chartData.timestamps || !chartData.scores) {
+        return { quarters: [], total: '0:0' };
+    }
+    
+    try {
+        const quarterEnds = chartData.total_match_time === 48 ? [12, 24, 36, 48] : [10, 20, 30, 40];
+        const quarters = [];
+        
+        // Определяем текущую минуту матча
+        const lastTimestamp = chartData.timestamps[chartData.timestamps.length - 1];
+        const currentMinute = lastTimestamp && lastTimestamp.includes(':') 
+            ? parseInt(lastTimestamp.split(':')[0]) || 0 
+            : 0;
+        
+        console.log('🔄 Расчет четвертей. Текущая минута:', currentMinute);
+        
+        let previousScore = { team1: 0, team2: 0 };
+        
+        // Обрабатываем каждую четверть
+        for (let i = 0; i < quarterEnds.length; i++) {
+            const quarterEnd = quarterEnds[i];
+            const isQuarterCompleted = currentMinute >= quarterEnd;
+            const isCurrentQuarter = currentMinute > (i > 0 ? quarterEnds[i-1] : 0) && currentMinute <= quarterEnd;
+            const isFutureQuarter = currentMinute < (i > 0 ? quarterEnds[i-1] : 0);
+            
+            let quarterScore = '0:0';
+            let foundScore = { team1: 0, team2: 0 };
+            
+            if (isFutureQuarter) {
+                // Будущая четверть - еще не началась
+                quarterScore = '-:-';
+            } else {
+                // Ищем последнюю запись до конца четверти (или текущую для незавершенной)
+                const searchEndTime = isQuarterCompleted ? quarterEnd : currentMinute;
+                let lastRecord = null;
+                
+                for (let j = 0; j < chartData.timestamps.length; j++) {
+                    const timestamp = chartData.timestamps[j];
+                    if (timestamp && timestamp.includes(':')) {
+                        const minute = parseInt(timestamp.split(':')[0]) || 0;
+                        
+                        if (minute <= searchEndTime) {
+                            lastRecord = {
+                                score: chartData.scores[j] || '0:0',
+                                timestamp: timestamp,
+                                minute: minute
+                            };
+                        }
+                    }
+                }
+                
+                if (lastRecord) {
+                    // Парсим счет
+                    const scoreParts = lastRecord.score.split(':');
+                    foundScore = {
+                        team1: parseInt(scoreParts[0]) || 0,
+                        team2: parseInt(scoreParts[1]) || 0
+                    };
+                    
+                    // Вычисляем очки за четверть
+                    const quarterPointsTeam1 = foundScore.team1 - previousScore.team1;
+                    const quarterPointsTeam2 = foundScore.team2 - previousScore.team2;
+                    
+                    quarterScore = `${quarterPointsTeam1}:${quarterPointsTeam2}`;
+                    previousScore = foundScore;
+                    
+                    console.log(`📊 Q${i+1}: ${isQuarterCompleted ? 'завершена' : 'в процессе'} ${quarterScore} на ${lastRecord.timestamp}`);
+                }
+            }
+            
+            quarters.push({
+                quarter: i + 1,
+                score: quarterScore,
+                time: `${quarterEnd}:00`,
+                completed: isQuarterCompleted,
+                current: isCurrentQuarter,
+                future: isFutureQuarter
+            });
+        }
+        
+        // Общий счет (последняя запись)
+        const totalScore = chartData.scores && chartData.scores.length > 0 
+            ? chartData.scores[chartData.scores.length - 1] 
+            : '0:0';
+        
+        return {
+            quarters: quarters,
+            total: totalScore,
+            currentMinute: currentMinute
+        };
+        
+    } catch (error) {
+        console.error('❌ Ошибка расчета четвертей:', error);
+        return { quarters: [], total: '0:0' };
+    }
+}
+
+// Функция создания HTML для таблицы четвертей
+// Функция создания HTML для таблицы четвертей (без фона)
+function createQuarterScoresHtml(quarterData) {
+    if (!quarterData.quarters || quarterData.quarters.length === 0) {
+        return '';
+    }
+    
+    const quarterItems = quarterData.quarters.map(q => {
+        return `
+            <div style="display: inline-block; margin: 0 6px; padding: 6px 10px; 
+                background: #f8f9fa; 
+                border-radius: 8px; 
+                min-width: 55px;
+                text-align: center;">
+                <div style="font-size: 18px; font-weight: bold; color: #2c3e50;">
+                    ${q.score}
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    return `
+        <div style="margin: 8px 0; padding: 0;">
+            <div style="display: flex; justify-content: center; align-items: center; gap: 8px; flex-wrap: wrap;">
+                ${quarterItems}
+                <div style="padding: 8px 16px; background: #e8f4fd; border-radius: 8px; border: 2px solid #b3d9ff;">
+                    <div style="font-size: 20px; font-weight: bold; color: #2c3e50;">${quarterData.total}</div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// Обновляем функцию updateChartTitleFromData чтобы включала четверти
+function updateChartTitleFromData(chartData) {
+    if (!chartData.timestamps || chartData.timestamps.length === 0) return;
+    
+    const lastIndex = chartData.timestamps.length - 1;
+    const currentValues = {
+        totalPoints: chartData.total_points[lastIndex] || '-',
+        totalValue: chartData.total_values[lastIndex] || '-',
+        pace: chartData.pace_data[lastIndex] || '-',
+        timestamp: chartData.timestamps[lastIndex] || '-',
+        score: chartData.scores ? chartData.scores[lastIndex] : '-'
+    };
+    
+    const totalValues = chartData.total_values.filter(val => val !== null && val !== undefined);
+    const maxTotal = totalValues.length > 0 ? Math.max(...totalValues) : null;
+    
+    const initialTotal = chartData.initial_total || (chartData.total_values && chartData.total_values[0]);
+    const currentTotal = chartData.total_values && chartData.total_values[lastIndex];
+    
+    let totalDiffHtml = '';
+    if (initialTotal && currentTotal) {
+        const totalDiff = (currentTotal - initialTotal).toFixed(1);
+        const totalDiffPercent = ((currentTotal - initialTotal) / initialTotal * 100).toFixed(1);
+        totalDiffHtml = `💹 Δ Тотала: <strong>${totalDiff > 0 ? '+' : ''}${totalDiff} (${totalDiffPercent > 0 ? '+' : ''}${totalDiffPercent}%)</strong>`;
+    }
+    
+    let maxTotalHtml = '';
+    if (maxTotal) {
+        maxTotalHtml = `📈 Макс. тотал: <strong>${maxTotal.toFixed(1)}</strong>`;
+    }
+    
+    // 🔥 СЧЕТ ПО ЧЕТВЕРТЯМ
+    const quarterScores = calculateQuarterScores(chartData);
+    const quarterScoresHtml = createQuarterScoresHtml(quarterScores);
+    
+    const chartTitle = document.getElementById('chartTitle');
+    if (chartTitle && currentOpenMatchId) {
+        const matchInfo = window.currentMatchInfo || {
+            teams: 'Команда 1 vs Команда 2',
+            tournament: 'Турнир',
+            currentTime: '0:00'
+        };
+        chartTitle.innerHTML = `
+            <div style="text-align: center; padding: 5px 0;">
+                <!-- 🔥 КОМАНДЫ И ТУРНИР В ОДНОЙ СТРОКЕ -->
+                <div style="font-size: 20px; font-weight: bold; color: #2c3e50; margin-bottom: 8px;">
+                    ${matchInfo.teams} <span style="font-size: 14px; color: #5d6d7e; font-weight: normal;">(${matchInfo.tournament})</span>
+                </div>
+                
+                <!-- 🔥 ОБЪЕДИНЕННАЯ СТРОКА: ВРЕМЯ + СЧЕТ ПО ЧЕТВЕРТЯМ -->
+                <div style="display: flex; justify-content: center; align-items: center; gap: 15px; margin-bottom: 8px;">
+                    <div style="font-size: 18px; color: #7f8c8d; background: #f8f9fa; padding: 8px 16px; border-radius: 10px;">
+                        ⏱️ <strong>${currentValues.timestamp}</strong>
+                    </div>
+                    ${quarterScoresHtml}
+                </div>
+                
+                <!-- 🔥 АНАЛИТИКА ТЕКУЩЕГО СОСТОЯНИЯ -->
+                <div style="font-size: 18px; color: #2c3e50; background: #f8f9fa; padding: 8px 16px; border-radius: 10px; display: inline-block;">
+                    🏀 Очки: <strong>${currentValues.totalPoints}</strong> | 
+                    📈 Тотал: <strong>${currentValues.totalValue}</strong> |
+                    ⚡ Темп: <strong>${currentValues.pace}</strong> |
+                    ${totalDiffHtml} |
+                    ${maxTotalHtml}
+                </div>
+            </div>
+        `;
+    }
+}
+
+// Также обновляем updateChartTitleForAnalytics
+function updateChartTitleForAnalytics(chartData, teams, tournament, currentTime) {
+    updateChartTitleFromData(chartData); // Просто вызываем ту же функцию
+}
+
+// Добавьте эту функцию в начало файла chart.js после глобальных переменных
+function getMatchInfoByMatchId(matchId) {
+    console.log('🔍 Поиск информации о матче:', matchId);
+    
+    // В первую очередь используем window.currentMatchInfo, если он соответствует текущему матчу
+    if (window.currentMatchInfo && window.currentMatchInfo.matchId === matchId) {
+        console.log('✅ Используем window.currentMatchInfo:', window.currentMatchInfo);
+        return window.currentMatchInfo;
+    }
+    
+    // Если не совпадает, ищем в DOM
+    console.log('🔍 Ищем матч в DOM...');
+    
+    // Пробуем найти в таблице активных матчей
+    const rows = document.querySelectorAll('#matches-table tbody tr');
+    for (let row of rows) {
+        const onclickAttr = row.getAttribute('onclick');
+        if (onclickAttr && onclickAttr.includes(`showMatchChart(${matchId},`)) {
+            const matchTeams = row.querySelector('.match-teams');
+            const tournamentElement = row.querySelector('.tournament');
+            const timeElement = row.querySelector('td:nth-child(2) strong');
+            
+            const matchInfo = {
+                matchId: matchId,
+                teams: matchTeams ? matchTeams.textContent : 'Неизвестные команды',
+                tournament: tournamentElement ? tournamentElement.textContent : 'Неизвестный турнир',
+                currentTime: timeElement ? timeElement.textContent : '-'
+            };
+            
+            console.log('✅ Найдено в активных матчах:', matchInfo);
+            return matchInfo;
+        }
+    }
+    
+    // Пробуем найти в таблице архивных матчей
+    for (let row of rows) {
+        const onclickAttr = row.getAttribute('onclick');
+        if (onclickAttr && onclickAttr.includes(`showArchiveChart(${matchId},`)) {
+            const matchTeams = row.querySelector('.match-teams');
+            const tournamentElement = row.querySelector('.tournament');
+            const timeElement = row.querySelector('td:nth-child(4) strong'); // Время в другом столбце в архиве
+            
+            const matchInfo = {
+                matchId: matchId,
+                teams: matchTeams ? matchTeams.textContent : 'Неизвестные команды',
+                tournament: tournamentElement ? tournamentElement.textContent : 'Архивный матч',
+                currentTime: timeElement ? timeElement.textContent : 'Завершен'
+            };
+            
+            console.log('✅ Найдено в архивных матчах:', matchInfo);
+            return matchInfo;
+        }
+    }
+    
+    console.log('❌ Матч не найден в DOM, используем значения по умолчанию');
+    // Возвращаем значения по умолчанию как запасной вариант
+    return {
+        matchId: matchId,
+        teams: 'Команда 1 vs Команда 2',
+        tournament: 'Турнир',
+        currentTime: '0:00'
+    };
 }

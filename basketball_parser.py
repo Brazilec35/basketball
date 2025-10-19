@@ -261,10 +261,8 @@ class BasketballParser:
             return "Неизвестно"
 
     def _calculate_period(self, match_time, total_match_time):
-        """Вычисление периода матча на основе времени"""
         try:
             if not match_time or match_time == '-' or ':' not in match_time:
-                logging.debug(f"⚠️ Не могу определить период для времени: {match_time}")
                 return None
 
             # Парсим время матча
@@ -272,37 +270,30 @@ class BasketballParser:
             minutes = int(parts[0]) if parts[0].isdigit() else 0
             seconds = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 0
             
-            logging.info(f"🕐 Анализ времени: '{match_time}' -> {minutes}мин {seconds}сек, формат: {total_match_time}мин")
-
-            # Определяем период в зависимости от формата
+            total_seconds = minutes * 60 + seconds
+            
+            # 🔥 ОПРЕДЕЛЯЕМ ГРАНИЦЫ ПЕРИОДОВ ДЛЯ РАЗНЫХ ФОРМАТОВ
             if total_match_time == 40:  # 4x10 минут
-                if minutes < 10:
-                    period = 1
-                elif minutes < 20:
-                    period = 2
-                elif minutes < 30:
-                    period = 3
-                elif minutes < 40:
-                    period = 4
-                else:
-                    period = 5  # овертайм
-                    
+                period_ends = [10*60, 20*60, 30*60, 40*60]  # в секундах: 10:00, 20:00, 30:00, 40:00
             elif total_match_time == 48:  # 4x12 минут
-                if minutes < 12:
-                    period = 1
-                elif minutes < 24:
-                    period = 2
-                elif minutes < 36:
-                    period = 3
-                elif minutes < 48:
-                    period = 4
-                else:
-                    period = 5  # овертайм
+                period_ends = [12*60, 24*60, 36*60, 48*60]  # в секундах: 12:00, 24:00, 36:00, 48:00
             else:
                 # По умолчанию для неизвестных форматов
-                period = (minutes // 10) + 1
-
-            logging.info(f"✅ Определен период: {period} для времени {match_time}")
+                period_ends = [10*60, 20*60, 30*60, 40*60]
+            
+            # 🔥 ОПРЕДЕЛЯЕМ ПЕРИОД
+            if total_seconds <= period_ends[0]:          # 00:00 - 10:00 (40мин) или 00:00 - 12:00 (48мин)
+                period = 1
+            elif total_seconds <= period_ends[1]:        # 10:01 - 20:00 или 12:01 - 24:00
+                period = 2
+            elif total_seconds <= period_ends[2]:        # 20:01 - 30:00 или 24:01 - 36:00
+                period = 3
+            elif total_seconds <= period_ends[3]:        # 30:01 - 40:00 или 36:01 - 48:00
+                period = 4
+            else:                                        # после 40:00 или 48:00
+                period = 5  # овертайм
+            
+            logging.info(f"🎯 Матч: время {match_time} ({total_seconds}сек), формат {total_match_time}мин, период {period}")
             return period
 
         except Exception as e:
