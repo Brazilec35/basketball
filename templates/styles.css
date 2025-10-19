@@ -329,3 +329,58 @@ tr:hover {
     white-space: nowrap;
     height: 42px; /* Выравниваем по высоте инпутов */
 }
+
+// ==================== ТЕПЛОВАЯ КАРТА ====================
+
+/* Стили для тепловой карты */
+.heatmap-legend {
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 8px;
+    padding: 10px;
+    margin: 10px 0;
+    border: 1px solid #e0e0e0;
+}
+
+.heatmap-scale {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-bottom: 8px;
+}
+
+.heatmap-color-box {
+    width: 20px;
+    height: 20px;
+    border-radius: 3px;
+    border: 1px solid rgba(0,0,0,0.2);
+}
+
+.heatmap-label {
+    font-size: 12px;
+    color: #666;
+}
+
+/* Анимации для тепловой карты */
+@keyframes heatmapPulse {
+    0% { opacity: 0.7; }
+    50% { opacity: 1; }
+    100% { opacity: 0.7; }
+}
+
+.heatmap-bar:hover {
+    animation: heatmapPulse 0.5s ease-in-out;
+    filter: brightness(1.2);
+}
+
+/* Адаптивность для мобильных */
+@media (max-width: 768px) {
+    .heatmap-legend {
+        padding: 8px;
+        font-size: 12px;
+    }
+    
+    .heatmap-color-box {
+        width: 15px;
+        height: 15px;
+    }
+}
