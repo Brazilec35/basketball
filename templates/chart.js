@@ -25,11 +25,17 @@ function updateLegendLabels(chart) {
 }
 
 function timeToMinutes(timeStr) {
+ 
     if (!timeStr || timeStr === '-') return 0;
+    
+    // Убираем возможные лишние символы
+    timeStr = timeStr.trim().split(' ')[0]; // Берем только часть до пробела
+    
     const parts = timeStr.split(':');
     const minutes = parseInt(parts[0]) || 0;
     const seconds = parseInt(parts[1]) || 0;
-    return minutes + (seconds / 60);
+    const result = minutes + (seconds / 60);
+    return result;
 }
 
 function updateDatasetLabels(chart) {
@@ -203,6 +209,7 @@ function createChart(chartData, teams, tournament, currentTime) {
     // Ищем индекс времени ставки в массиве временных меток
     let betTimestampIndex = -1;
     if (chartData.bet_timestamp) {
+        const betMinutes = timeToMinutes(chartData.bet_timestamp);       
         // Ищем в массиве timestamps время, которое соответствует ставке
         betTimestampIndex = chartData.timestamps.findIndex(
             time => time === chartData.bet_timestamp
@@ -245,10 +252,11 @@ function createChart(chartData, teams, tournament, currentTime) {
         });
     }
     if (betTimestampIndex !== -1) {
+        const betMinutes = timeToMinutes(chartData.bet_timestamp);
         annotations.betLine = {
             type: 'line',
-            xMin: betTimestampIndex,
-            xMax: betTimestampIndex,
+            xMin: betMinutes,
+            xMax: betMinutes,
             yMin: 0,
             yMax: 'max',
             borderColor: 'rgb(255, 215, 0)',
@@ -270,7 +278,7 @@ function createChart(chartData, teams, tournament, currentTime) {
         // ДОБАВЛЯЕМ ТОЧКУ СТАВКИ
         annotations.betPoint = {
             type: 'point',
-            xValue: betTimestampIndex,
+            xValue: betMinutes,
             yValue: chartData.total_values[betTimestampIndex],
             backgroundColor: 'rgb(255, 215, 0)',
             borderColor: 'rgb(255, 215, 0)',
