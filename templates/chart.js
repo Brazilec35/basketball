@@ -145,7 +145,7 @@ function createHeatmapData(chartData) {
         pointsPerMinute.forEach(item => {
             heatmapData.push({
                 x: item.minute,
-                y: item.points * 10,
+                y: Math.min(item.points * 10, 150),
                 points: item.points,
                 timestamp: item.timestamp
             });
