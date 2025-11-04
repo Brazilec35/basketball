@@ -18,9 +18,6 @@ timeout /t 10 /nobreak
 echo Step 2: Starting Data Parser...
 start "Basketball Parser" start_parser.bat
 
-echo Step 3: CloudPub Setup Instructions...
-start "CloudPub Info" start_cloudpub.bat
-
 echo.
 echo ========================================
 echo          SETUP COMPLETE!
@@ -30,5 +27,8 @@ echo 1. Web Server: http://localhost:8000
 echo 2. Parser: Running in background
 echo 3. Check CloudPub window for public access
 echo.
-echo Press any key to close this window...
-pause >nul
+echo All components started successfully!
+echo This window will close automatically...
+
+timeout /t 2 /nobreak >nul
+exit
