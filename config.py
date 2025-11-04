@@ -7,8 +7,6 @@
 PARSER_CONFIG = {
     'REFRESH_INTERVAL': 5,           # секунды между обновлениями
     'PAGE_LOAD_TIMEOUT': 15,          # секунды на загрузку страницы
-    'MAX_RETRIES': 2,                 # попытки переподключения при ошибках
-    'RETRY_DELAY': 5,                 # секунды между попытками
 }
 
 # Настройки браузера
@@ -38,12 +36,10 @@ SITE_CONFIG = {
 # Настройки БД
 DATABASE_CONFIG = {
     'DB_PATH': 'basketball.db',
-    'BACKUP_INTERVAL': 3600,          # секунды между бэкапами
 }
 
 # Настройки фильтрации матчей
 MATCH_FILTERS = {
-    'EXCLUDE_2X10': True,             # исключать матчи 2x10
     'EXCLUDE_WOMEN': False,           # исключать женские матчи (кроме (ж))
     # минимальное время матча для анализа (минуты)
     'MIN_TIME_ELAPSED': 2,
@@ -78,24 +74,4 @@ MATCH_TIME_CONFIG = {
 
     # Стандарт по умолчанию (если не нашли в списке)
     'DEFAULT_TIME': 40
-}
-
-STRATEGY_CONFIG = {
-    'DEVIATION_THRESHOLD': 5,      # Порог отклонения тотала для первого сигнала (%)
-    'PACE_REVERSAL_CONFIRMATIONS': 2,  # Количество подтверждений разворота темпа
-    'MIN_MATCH_PROGRESS': 15,      # Минимальный прогресс матча для анализа (%)
-    'MAX_MATCH_PROGRESS': 85,      # Максимальный прогресс матча для анализа (%)
-}
-
-PRODUCTION_CONFIG = {
-    'DEBUG': False,
-    'REFRESH_INTERVAL': 10,
-    'HEADLESS': True,
-    'DATABASE_PATH': '/app/data/basketball.db'
-}
-
-BET_CONFIG = {
-    'TRIGGER_PERCENT': 15,      # для срабатывания ставки
-    'WARNING_PERCENT': 10,      # для подсветки в таблице
-    'MIN_MATCH_TIME': 5,        # минимальное время матча (минуты)
 }

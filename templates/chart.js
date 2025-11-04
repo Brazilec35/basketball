@@ -1,13 +1,7 @@
-<!-- chart.js-->
+// chart.js - логика графиков и тепловых карт
 
-// Глобальные переменные для графика
-var currentChart = null;
-var currentOpenMatchId = null;
-var previousChartData = null;
-var changeIndicatorTimeout = null;
 // ==================== ТЕПЛОВАЯ КАРТА ====================
 
-// Функция расчета очков за каждую минуту
 // Функция расчета очков за каждую минуту
 function calculatePointsPerMinute(chartData) {
     if (!chartData || !chartData.timestamps || !chartData.total_points) {
@@ -101,8 +95,8 @@ function getHeatmapColor(points) {
     if (points <= 6) return 'rgba(255, 165, 0, 0.7)';        // Оранжевый - высокая
     return 'rgba(255, 50, 50, 0.8)';                         // Красный - очень высокая
 }
-// Функция получения градиента для тепловой карты
 
+// Функция получения градиента для тепловой карты
 function getHeatmapGradient(ctx, chartArea, points) {
     // Если нет контекста или области графика, возвращаем простой цвет
     if (!ctx || !chartArea) {
@@ -166,6 +160,9 @@ function isHeatmapDataAvailable(chartData) {
         chartData.total_points && 
         chartData.total_points.length > 0;
 }
+
+// ==================== ФУНКЦИИ ГРАФИКОВ ====================
+
 // Функции для обновления легенды графика
 function updateLegendLabels(chart) {
     const datasets = chart.data.datasets;
@@ -195,20 +192,6 @@ function updateLegendLabels(chart) {
             index: index
         };
     });
-}
-
-function timeToMinutes(timeStr) {
-
-    if (!timeStr || timeStr === '-') return 0;
-    
-    // Убираем возможные лишние символы
-    timeStr = timeStr.trim().split(' ')[0]; // Берем только часть до пробела
-    
-    const parts = timeStr.split(':');
-    const minutes = parseInt(parts[0]) || 0;
-    const seconds = parseInt(parts[1]) || 0;
-    const result = minutes + (seconds / 60);
-    return result;
 }
 
 function updateDatasetLabels(chart) {

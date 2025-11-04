@@ -6,7 +6,6 @@ import time
 import logging
 from basketball_parser import BasketballParser
 from database import Database
-from match_monitor import MatchMonitor
 
 # Настройка логирования
 logging.basicConfig(
@@ -19,7 +18,6 @@ class BasketballApp:
     def __init__(self):
         self.parser = BasketballParser()
         self.db = Database()
-        self.monitor = MatchMonitor(self.db)
         self.is_running = False
 
     def start(self):
@@ -83,14 +81,6 @@ class BasketballApp:
             except Exception as e:
                 logging.error(f"Ошибка в основном цикле: {e}")
                 time.sleep(5)
-
-    def add_to_monitor(self, team_name):
-        """Добавить матч в мониторинг"""
-        return self.monitor.add_match(team_name)
-
-    def remove_from_monitor(self, team_name):
-        """Убрать матч из мониторинга"""
-        return self.monitor.remove_match(team_name)
 
 
 def main():

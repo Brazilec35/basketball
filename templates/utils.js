@@ -1,4 +1,5 @@
-<!-- utils.js-->
+// utils.js - общие утилиты для всего приложения
+
 // Глобальные переменные
 var currentChart = null;
 var wsConnected = false;
@@ -6,8 +7,50 @@ var currentOpenMatchId = null;
 var previousChartData = null;
 var changeIndicatorTimeout = null;
 
+// Конфигурация ставок
+const BET_CONFIG = {
+    WARNING_PERCENT: 10
+};
 
-// Функции для цветовых классов
+// ==================== ОБЩИЕ УТИЛИТЫ ====================
+
+// Экранирование HTML
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Расчет минут из времени формата "MM:SS"
+function calculateMinutesElapsed(currentTime) {
+    if (!currentTime || currentTime === '-') return 0;
+    try {
+        const parts = currentTime.split(':');
+        if (parts.length < 2) return 0;
+        const minutes = parseInt(parts[0]) || 0;
+        const seconds = parseInt(parts[1]) || 0;
+        return minutes + (seconds / 60);
+    } catch (error) {
+        return 0;
+    }
+}
+
+// Конвертация времени в минуты (для графиков)
+function timeToMinutes(timeStr) {
+    if (!timeStr || timeStr === '-') return 0;
+    
+    // Убираем возможные лишние символы
+    timeStr = timeStr.trim().split(' ')[0];
+    
+    const parts = timeStr.split(':');
+    const minutes = parseInt(parts[0]) || 0;
+    const seconds = parseInt(parts[1]) || 0;
+    const result = minutes + (seconds / 60);
+    return result;
+}
+
+// ==================== ЦВЕТОВЫЕ КЛАССЫ ====================
+
 function getDeviationClass(deviation) {
     if (!deviation) return 'neutral';
     if (deviation > 5) return 'positive';
@@ -18,8 +61,8 @@ function getDeviationClass(deviation) {
 function getTotalDiffClass(diff, percent) {
     if (!diff || diff === 0) return '';
     
-    if (percent < -10) return 'row-negative';
-    if (percent > 10) return 'row-positive';
+    if (percent < -BET_CONFIG.WARNING_PERCENT) return 'row-negative';
+    if (percent > BET_CONFIG.WARNING_PERCENT) return 'row-positive';
     return '';
 }
 
@@ -30,15 +73,19 @@ function getCellDiffClass(percent) {
     return 'neutral';
 }
 
-// Экранирование HTML
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
+// ==================== РАБОТА С ДАННЫМИ МАТЧЕЙ ====================
 
-// Функция для получения информации о матче
+// Получение информации о матче по ID
 function getMatchInfoByMatchId(matchId) {
+    console.log('🔍 Поиск информации о матче:', matchId);
+    
+    // Используем window.currentMatchInfo, если он соответствует текущему матчу
+    if (window.currentMatchInfo && window.currentMatchInfo.matchId === matchId) {
+        console.log('✅ Используем window.currentMatchInfo:', window.currentMatchInfo);
+        return window.currentMatchInfo;
+    }
+    
+    // Поиск в DOM среди активных матчей
     const rows = document.querySelectorAll('#matches-table tbody tr');
     for (let row of rows) {
         const onclickAttr = row.getAttribute('onclick');
@@ -46,26 +93,50 @@ function getMatchInfoByMatchId(matchId) {
             const matchTeams = row.querySelector('.match-teams');
             const tournamentElement = row.querySelector('.tournament');
             const timeElement = row.querySelector('td:nth-child(2) strong');
-            const scoreElement = row.querySelector('td:nth-child(3) strong');
             
-            return {
-                tournament: tournamentElement ? tournamentElement.textContent : 'Неизвестный турнир',
-                currentTime: timeElement ? timeElement.textContent : '-',
+            const matchInfo = {
+                matchId: matchId,
                 teams: matchTeams ? matchTeams.textContent : 'Неизвестные команды',
-                score: scoreElement ? scoreElement.textContent : '-'
+                tournament: tournamentElement ? tournamentElement.textContent : 'Неизвестный турнир',
+                currentTime: timeElement ? timeElement.textContent : '-'
             };
+            
+            console.log('✅ Найдено в активных матчах:', matchInfo);
+            return matchInfo;
         }
     }
     
+    // Поиск в DOM среди архивных матчей
+    for (let row of rows) {
+        const onclickAttr = row.getAttribute('onclick');
+        if (onclickAttr && onclickAttr.includes(`showArchiveChart(${matchId},`)) {
+            const matchTeams = row.querySelector('.match-teams');
+            const tournamentElement = row.querySelector('.tournament');
+            const timeElement = row.querySelector('td:nth-child(4) strong');
+            
+            const matchInfo = {
+                matchId: matchId,
+                teams: matchTeams ? matchTeams.textContent : 'Неизвестные команды',
+                tournament: tournamentElement ? tournamentElement.textContent : 'Архивный матч',
+                currentTime: timeElement ? timeElement.textContent : 'Завершен'
+            };
+            
+            console.log('✅ Найдено в архивных матчах:', matchInfo);
+            return matchInfo;
+        }
+    }
+    
+    console.log('❌ Матч не найден в DOM, используем значения по умолчанию');
     return {
-        tournament: 'Неизвестный турнир',
-        currentTime: '-',
-        teams: 'Неизвестные команды',
-        score: '-'
+        matchId: matchId,
+        teams: 'Команда 1 vs Команда 2',
+        tournament: 'Турнир',
+        currentTime: '0:00'
     };
 }
 
-// Функции для работы с индикатором изменений
+// ==================== ИНДИКАТОРЫ ИЗМЕНЕНИЙ ====================
+
 function updateDiffElement(element, diff) {
     const absDiff = Math.abs(diff);
     
@@ -89,6 +160,8 @@ function updateChangeIndicator(changes) {
     const pointsDiffElem = document.getElementById('changePointsDiff');
     const paceDiffElem = document.getElementById('changePaceDiff');
     const totalDiffElem = document.getElementById('changeTotalDiff');
+    
+    if (!indicator) return;
     
     pointsElem.textContent = changes.points.value.toFixed(1);
     paceElem.textContent = changes.pace.value.toFixed(1);
@@ -149,3 +222,41 @@ function showChangesIndicator(newData) {
     
     previousChartData = JSON.parse(JSON.stringify(newData));
 }
+
+// ==================== МОДАЛЬНЫЕ ОКНА ====================
+
+// Закрытие модального окна графика
+function closeChartModal() {
+    const modal = document.getElementById('chartModal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+    if (currentChart) {
+        currentChart.destroy();
+        currentChart = null;
+    }
+    currentOpenMatchId = null;
+}
+
+// Инициализация обработчиков модального окна
+function initModalHandlers() {
+    const modal = document.getElementById('chartModal');
+    const closeBtn = document.querySelector('.close');
+    
+    if (closeBtn) {
+        closeBtn.onclick = closeChartModal;
+    }
+    
+    if (modal) {
+        window.onclick = function(event) {
+            if (event.target == modal) {
+                closeChartModal();
+            }
+        }
+    }
+}
+
+// Инициализация при загрузке
+document.addEventListener('DOMContentLoaded', function() {
+    initModalHandlers();
+});

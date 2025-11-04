@@ -1,28 +1,16 @@
-<!-- app.js-->
-// Обработчики для модального окна
+// app.js - основная логика приложения
+
+// Обработчики для модального окна (упрощенные, т.к. есть в utils.js)
 const modal = document.getElementById('chartModal');
 const closeBtn = document.querySelector('.close');
-const BET_CONFIG = {
-    WARNING_PERCENT: 10
-};
 
 closeBtn.onclick = function() {
-    modal.style.display = 'none';
-    if (currentChart) {
-        currentChart.destroy();
-        currentChart = null;
-    }
-    currentOpenMatchId = null;
+    closeChartModal();
 }
 
 window.onclick = function(event) {
     if (event.target == modal) {
-        modal.style.display = 'none';
-        if (currentChart) {
-            currentChart.destroy();
-            currentChart = null;
-        }
-        currentOpenMatchId = null;
+        closeChartModal();
     }
 }
 
@@ -58,7 +46,6 @@ function updateTable(matches) {
                     <th>Δ Тотала</th>
                     <th>Темп</th>
                     <th>Отклонение</th>
-                    <th>Ставка</th>
                 </tr>
             </thead>
             <tbody>
@@ -96,13 +83,6 @@ function updateTable(matches) {
                     <span class="${deviationClass}">
                         ${match.total_deviation ? `${match.total_deviation > 0 ? '+' : ''}${match.total_deviation}%` : '-'}
                     </span>
-                </td>
-                <td>
-                    ${match.bet ? 
-                        `🍀ТМ ${match.bet.total_value} (${match.bet.diff_percent.toFixed(1)}%)<br>
-                        <small>${match.bet.triggered_at}</small>` 
-                        : '-'
-                    }
                 </td>
             </tr>
         `;
