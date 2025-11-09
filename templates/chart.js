@@ -1,5 +1,135 @@
 // chart.js - логика графиков и тепловых карт
 
+// ==================== ЛИНИЯ СРЕДНЕЙ ВЫСОТЫ СТОЛБЦОВ ====================
+
+// Функция расчета средней высоты столбцов для текущего тотала
+function calculateAverageColumnHeight(heatmapData, currentTotal) {
+    if (!heatmapData || heatmapData.length === 0 || !currentTotal) {
+        return null;
+    }
+    
+    try {
+        // Фильтруем только минуты с данными (исключаем нулевые и будущие минуты)
+        const validMinutes = heatmapData.filter(item => 
+            item.points !== undefined && item.points !== null && item.points > 0
+        );
+        
+        if (validMinutes.length === 0) {
+            return null;
+        }
+        
+        // Суммируем все очки за минуту
+        const totalPoints = validMinutes.reduce((sum, item) => {
+            return sum + (item.points || 0);
+        }, 0);
+        
+        // Среднее количество очков за минуту
+        const averagePointsPerMinute = totalPoints / validMinutes.length;
+        
+        // Преобразуем в высоту столбца (умножаем на коэффициент масштабирования)
+        const averageHeight = averagePointsPerMinute * 10;
+        
+        // Рассчитываем целевую среднюю высоту на основе текущего тотала
+        const targetAveragePointsPerMinute = currentTotal / 40; // Предполагаем 40 минут игры
+        const targetAverageHeight = targetAveragePointsPerMinute * 10;
+        
+        return {
+            currentAverage: averageHeight,
+            targetAverage: targetAverageHeight,
+            currentPointsPerMinute: averagePointsPerMinute,
+            targetPointsPerMinute: targetAveragePointsPerMinute,
+            validMinutesCount: validMinutes.length
+        };
+    } catch (error) {
+        console.error('Ошибка расчета средней высоты:', error);
+        return null;
+    }
+}
+
+// Функция создания данных для линии средней высоты
+function createAverageLineData(chartData, averageData) {
+    if (!averageData || !chartData.timestamps || chartData.timestamps.length === 0) {
+        return [];
+    }
+    
+    try {
+        const xValues = chartData.timestamps.map(timeToMinutes);
+        const maxX = Math.max(...xValues);
+        
+        return [{
+            x: 0,
+            y: averageData.targetAverage
+        }, {
+            x: maxX,
+            y: averageData.targetAverage
+        }];
+    } catch (error) {
+        console.error('Ошибка создания данных линии:', error);
+        return [];
+    }
+}
+
+// Функция обновления средней линии на существующем графике
+function updateAverageLine(chart, chartData) {
+    if (!chart || !chartData) return;
+    
+    // Получаем текущий тотал (последнее значение)
+    const lastIndex = chartData.total_values.length - 1;
+    const currentTotal = chartData.total_values[lastIndex];
+    
+    if (!currentTotal) return;
+    
+    // Рассчитываем данные тепловой карты
+    const heatmapData = createHeatmapData(chartData);
+    const averageData = calculateAverageColumnHeight(heatmapData, currentTotal);
+    
+    if (!averageData) return;
+    
+    const averageLineData = createAverageLineData(chartData, averageData);
+    
+    // Находим индекс датасета со средней линией (индекс 1)
+    const averageLineIndex = 1;
+    
+    if (chart.data.datasets[averageLineIndex]) {
+        // Обновляем существующий датасет
+        chart.data.datasets[averageLineIndex].data = averageLineData;
+        chart.data.datasets[averageLineIndex].label = `Целевая средняя: ${averageData.targetPointsPerMinute.toFixed(1)} очков/мин`;
+        chart.data.datasets[averageLineIndex].originalLabel = `Целевая средняя: ${averageData.targetPointsPerMinute.toFixed(1)} очков/мин`;
+    }
+    
+    // Обновляем аннотацию для средней линии
+    updateAverageLineAnnotation(chart, averageData);
+}
+
+// Функция обновления аннотации для средней линии
+function updateAverageLineAnnotation(chart, averageData) {
+    if (!chart.options.plugins.annotation) {
+        chart.options.plugins.annotation = { annotations: {} };
+    }
+    
+    chart.options.plugins.annotation.annotations.averageLine = {
+        type: 'line',
+        yMin: averageData.targetAverage,
+        yMax: averageData.targetAverage,
+        xMin: 0,
+        xMax: 'max',
+        borderColor: 'rgba(0, 0, 255, 0.6)',
+        borderWidth: 2,
+        borderDash: [5, 5],
+        label: {
+            display: true,
+            content: `Цель: ${averageData.targetPointsPerMinute.toFixed(1)}/мин`,
+            position: 'end',
+            backgroundColor: 'rgba(0, 0, 255, 0.8)',
+            color: 'white',
+            font: {
+                size: 12,
+                weight: 'bold'
+            }
+        }
+    };
+}
+
 // ==================== ТЕПЛОВАЯ КАРТА ====================
 
 // Функция расчета очков за каждую минуту
@@ -33,7 +163,6 @@ function calculatePointsPerMinute(chartData) {
         const maxMinute = Math.max(...Object.keys(minuteData).map(Number));
         const maxTime = Math.min(maxMinute + 2, 60);
         
-        // 🔥 ИСПРАВЛЕНИЕ: вычисляем очки за КАЖДУЮ минуту отдельно
         for (let minute = 0; minute <= maxTime; minute++) {
             if (minuteData[minute] && minuteData[minute].length > 0) {
                 // Сортируем данные по времени внутри минуты
@@ -96,40 +225,6 @@ function getHeatmapColor(points) {
     return 'rgba(255, 50, 50, 0.8)';                         // Красный - очень высокая
 }
 
-// Функция получения градиента для тепловой карты
-function getHeatmapGradient(ctx, chartArea, points) {
-    // Если нет контекста или области графика, возвращаем простой цвет
-    if (!ctx || !chartArea) {
-        return getHeatmapColor(points);
-    }
-    
-    try {
-        const gradient = ctx.createLinearGradient(0, chartArea.bottom, 0, chartArea.top);
-        
-        if (points === 0) {
-            gradient.addColorStop(0, 'rgba(100, 150, 255, 0.1)');
-            gradient.addColorStop(1, 'rgba(100, 150, 255, 0.3)');
-        } else if (points <= 2) {
-            gradient.addColorStop(0, 'rgba(100, 200, 100, 0.2)');
-            gradient.addColorStop(1, 'rgba(100, 200, 100, 0.5)');
-        } else if (points <= 4) {
-            gradient.addColorStop(0, 'rgba(255, 255, 100, 0.3)');
-            gradient.addColorStop(1, 'rgba(255, 255, 100, 0.6)');
-        } else if (points <= 6) {
-            gradient.addColorStop(0, 'rgba(255, 165, 0, 0.4)');
-            gradient.addColorStop(1, 'rgba(255, 165, 0, 0.7)');
-        } else {
-            gradient.addColorStop(0, 'rgba(255, 50, 50, 0.5)');
-            gradient.addColorStop(1, 'rgba(255, 50, 50, 0.8)');
-        }
-        
-        return gradient;
-    } catch (error) {
-        // Если возникла ошибка, возвращаем простой цвет
-        return getHeatmapColor(points);
-    }
-}
-
 // Функция создания данных для тепловой карты
 function createHeatmapData(chartData) {
     try {
@@ -182,6 +277,19 @@ function updateLegendLabels(chart) {
             };
         }
         
+        // Специальная обработка для линии средней высоты
+        if (label.includes('Целевая средняя')) {
+            return {
+                text: '🎯 ' + label,
+                fillStyle: 'rgba(0, 0, 255, 0.8)',
+                strokeStyle: 'rgba(0, 0, 255, 0.8)',
+                lineWidth: 2,
+                pointStyle: 'line',
+                hidden: !chart.isDatasetVisible(index),
+                index: index
+            };
+        }
+        
         return {
             text: label,
             fillStyle: dataset.borderColor,
@@ -219,7 +327,7 @@ function refreshChart(newData) {
     const maxTotal = totalValues.length > 0 ? Math.max(...totalValues) : null;
     const minTotal = totalValues.length > 0 ? Math.min(...totalValues) : null;
     
-    // 🔥 ОБНОВЛЯЕМ ДАННЫЕ ТЕПЛОВОЙ КАРТЫ
+    // 🔥 ОБНОВЛЯЕМ ДАННЫЕ ТЕПЛОВОЙ КАРТЫ (индекс 0)
     if (currentChart.data.datasets[0] && currentChart.data.datasets[0].label.includes('Тепловая карта')) {
         currentChart.data.datasets[0].data = createHeatmapData(newData);
         
@@ -233,37 +341,42 @@ function refreshChart(newData) {
         }
     }
     
-    // Обновляем данные с новой структурой (x, y) - СМЕЩАЕМ ИНДЕКСЫ на +1
-    currentChart.data.datasets[1].data = xValues.map((x, i) => ({ 
+    // 🔥 ОБНОВЛЯЕМ ЛИНИЮ СРЕДНЕЙ ВЫСОТЫ (индекс 1)
+    updateAverageLine(currentChart, newData);
+    
+    // Обновляем очки (индекс 2)
+    currentChart.data.datasets[2].data = xValues.map((x, i) => ({ 
         x: x, 
         y: newData.total_points[i] 
     }));
     
-    currentChart.data.datasets[2].data = xValues.map((x, i) => ({ 
+    // Обновляем линию тотала (индекс 3)
+    currentChart.data.datasets[3].data = xValues.map((x, i) => ({ 
         x: x, 
         y: newData.total_values[i] 
     }));
     
-    currentChart.data.datasets[3].data = xValues.map((x, i) => ({ 
+    // Обновляем темп игры (индекс 4)
+    currentChart.data.datasets[4].data = xValues.map((x, i) => ({ 
         x: x, 
         y: newData.pace_data[i] 
     }));
     
-    // Обновляем линии макс/мин тоталов - СМЕЩАЕМ ИНДЕКСЫ на +1
-    if (maxTotal && currentChart.data.datasets[4]) {
-        currentChart.data.datasets[4].data = xValues.map(x => ({ 
+    // Обновляем линии макс/мин тоталов (индексы 5 и 6)
+    if (maxTotal && currentChart.data.datasets[5]) {
+        currentChart.data.datasets[5].data = xValues.map(x => ({ 
             x: x, 
             y: maxTotal 
         }));
-        currentChart.data.datasets[4].label = `Макс. тотал: ${maxTotal}`;
+        currentChart.data.datasets[5].label = `Макс. тотал: ${maxTotal}`;
     }
     
-    if (minTotal && currentChart.data.datasets[5]) {
-        currentChart.data.datasets[5].data = xValues.map(x => ({ 
+    if (minTotal && currentChart.data.datasets[6]) {
+        currentChart.data.datasets[6].data = xValues.map(x => ({ 
             x: x, 
             y: minTotal 
         }));
-        currentChart.data.datasets[5].label = `Мин. тотал: ${minTotal}`;
+        currentChart.data.datasets[6].label = `Мин. тотал: ${minTotal}`;
     }
     
     // Обновляем аннотации для ставки (если есть)
@@ -330,6 +443,13 @@ function createChart(chartData, teams, tournament, currentTime) {
     // Конвертируем временные метки в минуты для оси X
     const xValues = chartData.timestamps.map(timeToMinutes);
     window.currentChartData = chartData;
+    
+    // Получаем текущий тотал для расчета средней линии
+    const lastIndex = chartData.total_values.length - 1;
+    const currentTotal = chartData.total_values[lastIndex];
+    const averageData = calculateAverageColumnHeight(createHeatmapData(chartData), currentTotal);
+    const averageLineData = createAverageLineData(chartData, averageData);
+    
     // Ищем индекс времени ставки в массиве временных меток
     let betTimestampIndex = -1;
     if (chartData.bet_timestamp) {
@@ -365,7 +485,7 @@ function createChart(chartData, teams, tournament, currentTime) {
                     borderDash: [5, 3],
                     label: {
                         display: true,
-                        content: `П${index + 1}`,
+                        content: `П${index + 2}`,
                         position: 'start',
                         backgroundColor: 'rgba(255, 165, 0, 0.8)',
                         color: 'white',
@@ -411,14 +531,41 @@ function createChart(chartData, teams, tournament, currentTime) {
             pointStyle: 'circle'
         };
     }
+    
+    // Добавляем аннотацию для средней линии
+    if (averageData) {
+        annotations.averageLine = {
+            type: 'line',
+            yMin: averageData.targetAverage,
+            yMax: averageData.targetAverage,
+            xMin: 0,
+            xMax: 'max',
+            borderColor: 'rgba(0, 0, 255, 0.6)',
+            borderWidth: 2,
+            borderDash: [5, 5],
+            label: {
+                display: true,
+                content: `Цель: ${averageData.targetPointsPerMinute.toFixed(1)} очков/мин`,
+                position: 'end',
+                backgroundColor: 'rgba(0, 0, 255, 0.8)',
+                color: 'white',
+                font: {
+                    size: 12,
+                    weight: 'bold'
+                }
+            }
+        };
+    }
+    
     previousChartData = null;
     const allAnnotations = { ...periodAnnotations, ...annotations };
+    
     currentChart = new Chart(ctx, {
         type: 'line',
         data: {
             labels: chartData.timestamps,
             datasets: [
-                // ТЕПЛОВАЯ КАРТА - первый элемент (отображается под всеми)
+                // ТЕПЛОВАЯ КАРТА - первый элемент (отображается под всеми) - индекс 0
                 {
                     label: 'Тепловая карта продуктивности',
                     originalLabel: 'Тепловая карта продуктивности',
@@ -447,6 +594,23 @@ function createChart(chartData, teams, tournament, currentTime) {
                     xAxisID: 'x',
                     yAxisID: 'y'
                 },
+                // ЛИНИЯ СРЕДНЕЙ ВЫСОТЫ - индекс 1
+                {
+                    label: averageData ? `Целевая средняя: ${averageData.targetPointsPerMinute.toFixed(1)} очков/мин` : 'Целевая средняя',
+                    originalLabel: averageData ? `Целевая средняя: ${averageData.targetPointsPerMinute.toFixed(1)} очков/мин` : 'Целевая средняя',
+                    data: averageLineData,
+                    borderColor: 'rgba(0, 0, 255, 0.8)',
+                    backgroundColor: 'rgba(0, 0, 255, 0.1)',
+                    borderWidth: 3,
+                    borderDash: [8, 4],
+                    pointRadius: 0,
+                    pointHoverRadius: 0,
+                    pointHitRadius: 0,
+                    fill: false,
+                    tension: 0,
+                    order: 1
+                },
+                // ОЧКИ - индекс 2
                 {
                     label: 'Очки',
                     originalLabel: 'Очки',
@@ -455,8 +619,10 @@ function createChart(chartData, teams, tournament, currentTime) {
                     backgroundColor: 'rgba(75, 192, 192, 0.1)',
                     borderWidth: 2,
                     tension: 0.1,
-                    fill: false
+                    fill: false,
+                    order: 2
                 },
+                // ЛИНИЯ ТОТАЛА - индекс 3
                 {
                     label: 'Линия тотала',
                     originalLabel: 'Линия тотала',
@@ -466,8 +632,10 @@ function createChart(chartData, teams, tournament, currentTime) {
                     borderWidth: 2,
                     borderDash: [5, 5],
                     tension: 0.1,
-                    fill: false
+                    fill: false,
+                    order: 3
                 },
+                // ТЕМП ИГРЫ - индекс 4
                 {
                     label: 'Темп игры',
                     originalLabel: 'Темп игры',
@@ -478,8 +646,10 @@ function createChart(chartData, teams, tournament, currentTime) {
                     tension: 0.1,
                     pointStyle: 'circle',
                     pointRadius: 3,
-                    fill: false
+                    fill: false,
+                    order: 4
                 },
+                // МАКС. ТОТАЛ - индекс 5
                 {
                     label: `Макс. тотал: ${maxTotal}`,
                     data: xValues.map(x => ({x: x, y: maxTotal})),
@@ -490,8 +660,10 @@ function createChart(chartData, teams, tournament, currentTime) {
                     pointRadius: 0,
                     pointHoverRadius: 0,
                     pointHitRadius: 0,
-                    fill: false
+                    fill: false,
+                    order: 5
                 },
+                // МИН. ТОТАЛ - индекс 6
                 {
                     label: `Мин. тотал: ${minTotal}`,
                     data: xValues.map(x => ({x: x, y: minTotal})),
@@ -502,8 +674,10 @@ function createChart(chartData, teams, tournament, currentTime) {
                     pointRadius: 0,
                     pointHoverRadius: 0,
                     pointHitRadius: 0,
-                    fill: false
+                    fill: false,
+                    order: 6
                 },
+                // СТАВКА - индекс 7
                 {
                     label: '🍀 Ставка',
                     data: chartData.timestamps.map((timestamp, index) => {
@@ -521,8 +695,9 @@ function createChart(chartData, teams, tournament, currentTime) {
                     borderWidth: 3,
                     pointRadius: 0,
                     fill: false,
-                    tension: 0
-                }   
+                    tension: 0,
+                    order: 7
+                }
             ]
         },
 
@@ -600,6 +775,8 @@ function createChart(chartData, teams, tournament, currentTime) {
                                 return `Макс. тотал: ${value}`;
                             } else if (datasetLabel.includes('Мин. тотал')) {
                                 return `Мин. тотал: ${value}`;
+                            } else if (datasetLabel.includes('Целевая средняя')) {
+                                return `Целевая средняя: ${value}`;
                             }
                             return `${datasetLabel}: ${value}`;
                         }
@@ -900,6 +1077,18 @@ function updateChartTitleFromData(chartData) {
     const quarterScores = calculateQuarterScores(chartData);
     const quarterScoresHtml = createQuarterScoresHtml(quarterScores);
     
+    // 🔥 ДАННЫЕ ДЛЯ СРЕДНЕЙ ВЫСОТЫ
+    const heatmapData = createHeatmapData(chartData);
+    const averageData = calculateAverageColumnHeight(heatmapData, currentTotal);
+    
+    let averageHtml = '';
+    if (averageData) {
+        averageHtml = `🎯 Цель: <strong>${averageData.targetPointsPerMinute.toFixed(1)} очков/мин</strong> | `;
+        if (averageData.currentPointsPerMinute) {
+            averageHtml += `Факт: <strong>${averageData.currentPointsPerMinute.toFixed(1)} очков/мин</strong> | `;
+        }
+    }
+    
     const chartTitle = document.getElementById('chartTitle');
     if (chartTitle && currentOpenMatchId) {
         const matchInfo = window.currentMatchInfo || {
@@ -924,6 +1113,7 @@ function updateChartTitleFromData(chartData) {
                 
                 <!-- 🔥 АНАЛИТИКА ТЕКУЩЕГО СОСТОЯНИЯ -->
                 <div style="font-size: 18px; color: #2c3e50; background: #f8f9fa; padding: 8px 16px; border-radius: 10px; display: inline-block;">
+                    ${averageHtml}
                     🏀 Очки: <strong>${currentValues.totalPoints}</strong> | 
                     📈 Тотал: <strong>${currentValues.totalValue}</strong> |
                     ⚡ Темп: <strong>${currentValues.pace}</strong> |
